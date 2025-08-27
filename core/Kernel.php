@@ -17,7 +17,7 @@ class Kernel
         $this->registerErrorHandler();
         $this->registerBaseBindings();
 
-        // Middleware alias’ları (varsa)
+        // Middleware aliases
         $this->router->alias('csrf', new \App\Middleware\CsrfMiddleware());
         $this->router->alias('throttle', new \App\Middleware\RateLimitMiddleware());
         if (class_exists(\Modules\Users\Middleware\AuthMiddleware::class)) {
@@ -30,7 +30,7 @@ class Kernel
         $this->registerBaseRoutes();
         $this->loadModules();
 
-        // Redirect kuralları
+        // Redirect rules from config
         $redirConfig = $this->app->basePath('app/Config/redirects.php');
         if (is_file($redirConfig)) {
             $rules = require $redirConfig;
@@ -85,24 +85,23 @@ class Kernel
 
     private function registerBaseRoutes(): void
     {
-        // Home
-        $this->router->get('/', [\App\Http\Controllers\HomeController::class, 'index']);
+        // Named home
+        $this->router->getNamed('home', '/', [\App\Http\Controllers\HomeController::class, 'index']);
 
         // SEO endpoints
-        $this->router->get('/sitemap.xml', function () {
-            $xml = SitemapRegistry::render();
+        $this->router->getNamed('sitemap', '/sitemap.xml', function () {
+            $xml = SEO\SitemapRegistry::render();
             return (new Response($xml, 200, ['Content-Type' => 'application/xml']));
         });
-
-        $this->router->get('/robots.txt', function () {
-            $txt = RobotsRegistry::render();
+        $this->router->getNamed('robots', '/robots.txt', function () {
+            $txt = SEO\RobotsRegistry::render();
             return (new Response($txt, 200, ['Content-Type' => 'text/plain']));
         });
 
-        // Status endpoint (sadece debug açıkken)
-        $this->router->get('/status', [\App\Http\Controllers\StatusController::class, 'index']);
+        // Status endpoint (debug)
+        $this->router->getNamed('status', '/status', [\App\Http\Controllers\StatusController::class, 'index']);
 
-        // Canonical host / trailing slash normalizer + Redirect + CSRF cookie
+        // Canonical host / trailing slash / CSRF cookie
         $this->router->middleware(function (Request $req, callable $next) {
             Csrf::ensureCookie();
 
@@ -134,8 +133,8 @@ class Kernel
         // Sitemap örnek kayıtları
         $base = rtrim(Config::get('app.url',''), '/');
         if ($base) {
-            SitemapRegistry::add(['loc' => $base . '/', 'changefreq' => 'daily',  'priority' => '0.8']);
-            SitemapRegistry::add(['loc' => $base . '/pages/hello-zcn', 'changefreq' => 'weekly', 'priority' => '0.6']);
+            SEO\SitemapRegistry::add(['loc' => $base . route('home'), 'changefreq' => 'daily',  'priority' => '0.8']);
+            SEO\SitemapRegistry::add(['loc' => $base . '/pages/hello-zcn', 'changefreq' => 'weekly', 'priority' => '0.6']);
         }
     }
 

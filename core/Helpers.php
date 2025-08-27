@@ -75,3 +75,15 @@ if (!function_exists('cookie_set')) {
         return @setcookie($name, $value, $params);
     }
 }
+if (!function_exists('route')) {
+    /**
+     * Named route URL helper.
+     * usage: route('login'), route('page.show', ['slug'=>'hello'])
+     */
+    function route(string $name, array $params = [], bool $absolute = false): string {
+        /** @var \Core\Router $router */
+        $router = app()->make('router');
+        if (!$router) throw new \RuntimeException('Router not bound.');
+        return $router->urlFor($name, $params, $absolute);
+    }
+}

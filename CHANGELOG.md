@@ -1,3 +1,9 @@
+## 2.0.0
+- Router: Named routes + URL generator (`route('name', params, absolute=false)`), `getNamed/postNamed/...`
+- Helpers: `route()` helper (Router::urlFor sarmalayıcı)
+- Controller: `Core\Controller` taban sınıfı (`view()`, `json()`, `redirect()`, `authorize()`)
+- Config: Per-env override (`app/Config/*.{APP_ENV}.php`), `config:cache` ile birlikte çalışır
+
 ## 1.9.0
 - Response: `file()` ile inline dosya sunumu; `ETag` ve `Last-Modified` başlıkları; `If-None-Match/If-Modified-Since` → 304
 - Upload: Görsellere max genişlik/yükseklik doğrulaması (config `upload.images`)

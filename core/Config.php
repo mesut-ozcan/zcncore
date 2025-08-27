@@ -14,7 +14,7 @@ final class Config
         self::$configDir = rtrim($configDir, '/');
         self::$cacheFile = self::path('storage/cache/config.cache.php');
 
-        // Eğer cache dosyası varsa onu kullan
+        // Cache varsa doğrudan yükle
         if (is_file(self::$cacheFile)) {
             $all = require self::$cacheFile;
             if (is_array($all)) {
@@ -23,8 +23,15 @@ final class Config
             }
         }
 
-        // Aksi halde app/Config altındaki tüm *.php dosyalarını yükle
-        self::$data = self::loadAll(self::$configDir);
+        // Normal yükleme + env override
+        $base = self::loadAll(self::$configDir);
+
+        $env = Env::get('APP_ENV', '');
+        if ($env) {
+            $base = self::applyEnvOverrides($base, self::$configDir, $env);
+        }
+
+        self::$data = $base;
     }
 
     private static function path(string $p): string
@@ -37,16 +44,28 @@ final class Config
         $all = [];
         if (!is_dir($dir)) return $all;
         foreach (glob($dir.'/*.php') as $file) {
-            $name = basename($file, '.php'); // app, database, modules vs.
+            // env dosyalarını burada değil override aşamasında ele alacağız
+            if (preg_match('/\.(local|dev|prod|stage)\.php$/', $file)) continue;
+            $name = basename($file, '.php');
             $val  = require $file;
-            if (is_array($val)) {
-                $all[$name] = $val;
-            }
+            if (is_array($val)) $all[$name] = $val;
         }
         return $all;
     }
 
-    /** Dot-notation destekli getter: get('app.debug', false) */
+    private static function applyEnvOverrides(array $base, string $dir, string $env): array
+    {
+        // app.php -> app.{env}.php gibi dosyaları bul, array_replace_recursive ile override et
+        foreach (glob($dir.'/*.'.$env.'.php') as $file) {
+            $name = basename($file, '.'.$env.'.php'); // örn: app
+            $val  = require $file;
+            if (is_array($val)) {
+                $base[$name] = array_replace_recursive($base[$name] ?? [], $val);
+            }
+        }
+        return $base;
+    }
+
     public static function get(string $key, $default = null)
     {
         if ($key === '') return self::$data;
@@ -61,7 +80,6 @@ final class Config
         return $ref;
     }
 
-    /** Dot-notation setter */
     public static function set(string $key, $value): void
     {
         $seg = explode('.', $key);
@@ -76,26 +94,23 @@ final class Config
         }
     }
 
-    /** Tüm config’i tek dosyaya cache’ler */
     public static function cache(): void
     {
-        // Güncel dosya sisteminden topla (cache'li olabilir; sıfırdan alalım)
+        $env = Env::get('APP_ENV', '');
         $all = self::loadAll(self::$configDir);
+        if ($env) $all = self::applyEnvOverrides($all, self::$configDir, $env);
 
-        // storage/cache dizini varsa yaz
         $export = "<?php\nreturn " . var_export($all, true) . ";\n";
         @file_put_contents(self::$cacheFile, $export);
-        // Belleğe de yükle
         self::$data = $all;
     }
 
-    /** Cache dosyasını temizler */
     public static function clearCache(): void
     {
-        if (is_file(self::$cacheFile)) {
-            @unlink(self::$cacheFile);
-        }
-        // Yeniden yükle
-        self::$data = self::loadAll(self::$configDir);
+        if (is_file(self::$cacheFile)) @unlink(self::$cacheFile);
+        $base = self::loadAll(self::$configDir);
+        $env  = Env::get('APP_ENV', '');
+        if ($env) $base = self::applyEnvOverrides($base, self::$configDir, $env);
+        self::$data = $base;
     }
 }
