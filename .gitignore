@@ -1,0 +1,27 @@
+# Composer vendor klasörü
+/vendor/
+
+# Ortam dosyası (gizli bilgiler)
+.env
+
+# WAMP / Windows gereksiz dosyalar
+Thumbs.db
+desktop.ini
+
+# VSCode ayarları
+.vscode/
+*.code-workspace
+
+# PhpStorm / JetBrains
+.idea/
+
+# Storage içeriği (cache, logs, uploads) - sadece boş .gitkeep bırak
+/storage/cache/*
+/storage/logs/*
+/storage/uploads/*
+
+# Node.js kullanırsan (ileride)
+node_modules/
+
+# Sistem dosyaları
+.DS_Store

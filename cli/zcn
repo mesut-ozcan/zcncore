@@ -1,0 +1,65 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+$base = __DIR__ . '/..';
+
+// minimal autoload
+require $base . '/core/Helpers.php';
+spl_autoload_register(function ($class) use ($base) {
+    $map = ['Core\\' => '/core/', 'App\\' => '/app/', 'Modules\\' => '/modules/'];
+    foreach ($map as $p=>$dir){
+        if (strncmp($class,$p,strlen($p))===0){
+            $path = $base . $dir . str_replace('\\','/',substr($class,strlen($p))) . '.php';
+            if (is_file($path)) require $path;
+        }
+    }
+});
+
+Core\Application::boot($base);
+
+$cmd = $argv[1] ?? 'help';
+
+switch ($cmd) {
+    case 'help':
+        echo "ZCN CLI\n";
+        echo "  php cli/zcn cache:clear\n";
+        echo "  php cli/zcn module:list\n";
+        echo "  php cli/zcn make:module Name\n";
+        exit(0);
+
+    case 'cache:clear':
+        array_map('unlink', glob($base.'/storage/cache/*.cache') ?: []);
+        echo "Cache cleared.\n";
+        exit(0);
+
+    case 'module:list':
+        if (!is_dir($base.'/modules')) { echo "No modules.\n"; exit(0); }
+        foreach (scandir($base.'/modules') as $m) {
+            if ($m==='.'||$m==='..') continue;
+            if (is_file("$base/modules/$m/module.json")) {
+                $meta = json_decode(file_get_contents("$base/modules/$m/module.json"), true);
+                echo "- {$meta['name']} ({$meta['version']})\n";
+            }
+        }
+        exit(0);
+
+    case 'make:module':
+        $name = $argv[2] ?? null;
+        if (!$name) { echo "Usage: php cli/zcn make:module Name\n"; exit(1); }
+        $modDir = $base . '/modules/' . $name;
+        @mkdir($modDir.'/Http/Controllers', 0777, true);
+        @mkdir($modDir.'/Views', 0777, true);
+        @mkdir($modDir.'/Migrations', 0777, true);
+        file_put_contents("$modDir/module.json", json_encode([
+            'name'=>$name,'slug'=>$name,'version'=>'0.1.0','routes'=>['routes.php'],
+            'migrations'=>[],'permissions'=>[],'dependencies'=>[]
+        ], JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
+        file_put_contents("$modDir/routes.php", "<?php\n// add routes for $name\n");
+        echo "Module skeleton created: modules/$name\n";
+        exit(0);
+
+    default:
+        echo "Unknown command: $cmd\n";
+        exit(1);
+}

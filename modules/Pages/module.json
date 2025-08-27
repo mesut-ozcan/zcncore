@@ -1,0 +1,11 @@
+{
+  "name": "Pages",
+  "slug": "Pages",
+  "version": "0.1.0",
+  "description": "Simple pages example module",
+  "providers": [],
+  "routes": ["routes.php"],
+  "migrations": ["Migrations/0001_create_pages.php"],
+  "permissions": ["pages.read"],
+  "dependencies": []
+}

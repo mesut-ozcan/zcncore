@@ -1,0 +1,19 @@
+{
+  "name": "zcn/zcncore",
+  "description": "ZCNCore - Minimal, module/theme capable core for many PHP projects (Saf PHP).",
+  "type": "project",
+  "license": "MIT",
+  "require": {},
+  "autoload": {
+    "psr-4": {
+      "Core\\\\": "core/",
+      "App\\\\": "app/",
+      "Modules\\\\": "modules/"
+    },
+    "files": ["core/Helpers.php"]
+  },
+  "scripts": {
+    "post-install-cmd": [],
+    "post-update-cmd": []
+  }
+}

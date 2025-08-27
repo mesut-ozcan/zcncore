@@ -1,0 +1,14 @@
+{
+  "name": "Default",
+  "slug": "default",
+  "version": "0.1.0",
+  "author": "ZCN",
+  "layouts": {
+    "main": "views/layouts/main.php"
+  },
+  "regions": ["content"],
+  "assets": {
+    "css": ["assets/css/app.css"],
+    "js": ["assets/js/app.js"]
+  }
+}
