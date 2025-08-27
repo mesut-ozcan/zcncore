@@ -1,3 +1,12 @@
+## 1.6.1
+- Helpers: `view()` helper geri eklendi (theme > module > app çözümleme). 1.6.0 sonrası undefined function hatası düzeltildi.
+
+## 1.6.0
+- Validation: `required`, `email`, `string`, `min`, `max`, `confirmed` kuralları; `Request::validate()`
+- Request helpers: `Request::current()`, `input()`, `all()`
+- Rate-limit: dosya tabanlı kalıcı `RateLimiter` + middleware entegrasyonu
+- CLI: `php cli/zcn rate:clear`
+
 ## 1.5.1
 - Helpers: `head()` artık gerçek `\Core\Head` döndürüyor (Intelephense uyumu).
 

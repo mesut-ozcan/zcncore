@@ -33,6 +33,45 @@ if (!function_exists('e')) {
     }
 }
 
+/**
+ * View resolver:
+ * - "Module::view/name" => önce theme override: themes/<theme>/modules/<Module>/views/<view/name>.php
+ *                          yoksa modules/<Module>/Views/<view/name>.php
+ * - "path/to/view"       => önce theme override: themes/<theme>/views/<path/to/view>.php
+ *                          yoksa app/Views/<path/to/view>.php
+ */
+if (!function_exists('view')) {
+    function view(string $name, array $data = []): string
+    {
+        $theme = (string) config('app.theme', 'default');
+
+        $candidates = [];
+        if (strpos($name, '::') !== false) {
+            [$module, $view] = explode('::', $name, 2);
+            $vp = str_replace(['.', '/'], DIRECTORY_SEPARATOR, $view);
+            $candidates[] = base_path("themes/{$theme}/modules/{$module}/views/{$vp}.php");
+            $candidates[] = base_path("modules/{$module}/Views/{$vp}.php");
+        } else {
+            $vp = str_replace(['.', '/'], DIRECTORY_SEPARATOR, $name);
+            $candidates[] = base_path("themes/{$theme}/views/{$vp}.php");
+            $candidates[] = base_path("app/Views/{$vp}.php");
+        }
+
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                extract($data, EXTR_SKIP);
+                ob_start();
+                include $file;
+                return ob_get_clean();
+            }
+        }
+
+        // Hata mesajında denenen yolları göster
+        $msg = "View not found: {$name}\nTried:\n - " . implode("\n - ", $candidates);
+        throw new \RuntimeException($msg);
+    }
+}
+
 if (!function_exists('head')) {
     /**
      * @deprecated Doğrudan static kullanım tercih edilir: \Core\Head::render()
