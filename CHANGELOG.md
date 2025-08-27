@@ -1,3 +1,12 @@
+## 1.5.1
+- Helpers: `head()` artık gerçek `\Core\Head` döndürüyor (Intelephense uyumu).
+
+## 1.5.0
+- Config cache: `php cli/zcn config:cache` / `config:clear`
+- Modül enable/disable: module.json `enabled` + `app/Config/modules.php` override
+- CSRF: SameSite=Lax cookie (XSRF-TOKEN) + header kontrolü (X-CSRF-TOKEN / X-XSRF-TOKEN)
+- Helpers: `csrf_meta()` eklendi
+
 ## 1.4.0
 - Head: OG/Twitter meta desteği (`addProperty`)
 - Users: Rate-limit middleware (login/forgot/reset POST)
