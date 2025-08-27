@@ -1,0 +1,11 @@
+{
+  "name": "Users",
+  "slug": "Users",
+  "version": "0.1.0",
+  "description": "Minimal session auth (register/login/logout) + role check",
+  "providers": [],
+  "routes": ["routes.php"],
+  "migrations": [],
+  "permissions": ["users.read", "users.write", "users.admin"],
+  "dependencies": []
+}

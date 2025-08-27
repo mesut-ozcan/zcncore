@@ -18,6 +18,19 @@ class Kernel
         $this->registerBaseBindings();
         $this->registerBaseRoutes();
         $this->loadModules();
+
+        // Redirect kuralları config'ten
+        $redirConfig = $this->app->basePath('app/Config/redirects.php');
+        if (is_file($redirConfig)) {
+            $rules = require $redirConfig;
+            if (is_array($rules)) {
+                foreach ($rules as $r) {
+                    if (!empty($r['from']) && !empty($r['to'])) {
+                        RedirectRegistry::add($r['from'], $r['to'], (int)($r['code'] ?? 301));
+                    }
+                }
+            }
+        }
     }
 
     private function registerErrorHandler(): void
@@ -59,21 +72,29 @@ class Kernel
             return (new Response($txt, 200, ['Content-Type' => 'text/plain']));
         });
 
-        // Canonical host / trailing slash normalizer
+        // Status endpoint (sadece debug açıkken)
+        $this->router->get('/status', [\App\Http\Controllers\StatusController::class, 'index']);
+
+        // Canonical host / trailing slash normalizer + Redirect check
         $this->router->middleware(function (Request $req, callable $next) {
             $hostCanonical = Config::get('app.canonical_host', '');
-            $slashPolicy = Config::get('app.trailing_slash', 'none'); // none|add
+            $slashPolicy   = Config::get('app.trailing_slash', 'none'); // none|add
 
-            $uri = $req->path();
+            $uri  = $req->path();
             $host = $req->host();
 
-            // Host normalize
+            // 0) Özel redirect kuralları (ÖNCE)
+            if ($redir = RedirectRegistry::check($req)) {
+                return $redir;
+            }
+
+            // 1) Host normalize
             if ($hostCanonical && $host !== $hostCanonical) {
                 $url = $req->scheme() . '://' . $hostCanonical . $req->fullUri();
                 return Response::redirect($url, 301);
             }
 
-            // Trailing slash normalize
+            // 2) Trailing slash normalize
             if ($slashPolicy === 'add' && !str_ends_with($uri, '/')) {
                 return Response::redirect($req->url('/') . '/', 301);
             }
@@ -81,13 +102,15 @@ class Kernel
                 return Response::redirect(rtrim($req->url('/'), '/'), 301);
             }
 
-            // Optional: custom redirects from registry
-            if ($redir = RedirectRegistry::check($req)) {
-                return $redir;
-            }
-
             return $next($req);
         });
+
+        // Sitemap örnek kayıtları
+        $base = rtrim(Config::get('app.url',''), '/');
+        if ($base) {
+            SitemapRegistry::add(['loc' => $base . '/', 'changefreq' => 'daily',  'priority' => '0.8']);
+            SitemapRegistry::add(['loc' => $base . '/pages/hello-zcn', 'changefreq' => 'weekly', 'priority' => '0.6']);
+        }
     }
 
     private function loadModules(): void
@@ -99,7 +122,6 @@ class Kernel
             if ($mod === '.' || $mod === '..') continue;
             $modulePath = $modulesDir . '/' . $mod;
             if (is_dir($modulePath) && is_file($modulePath . '/module.json')) {
-                // Simple register: include routes.php if exists
                 $routes = $modulePath . '/routes.php';
                 if (is_file($routes)) {
                     require $routes;

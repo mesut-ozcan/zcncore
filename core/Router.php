@@ -32,38 +32,51 @@ class Router
     public function dispatch(Request $req): Response
     {
         $method = strtoupper($req->method);
-        $path = $req->path();
+        $path   = $req->path();
 
-        foreach ($this->routes[$method] ?? [] as $route) {
-            if (preg_match($route['regex'], $path, $m)) {
-                array_shift($m);
-                $params = $m;
+        // ÇÖZÜCÜ: Rotayı bulup çalıştırır (eşleşmezse 404 döner).
+        $resolver = function(Request $req) use ($method, $path): Response {
+            foreach ($this->routes[$method] ?? [] as $route) {
+                if (preg_match($route['regex'], $path, $m)) {
+                    array_shift($m);
+                    $params = $m;
 
-                $pipeline = array_merge($this->globalMiddleware, $route['middleware'] ?? []);
-                $handler = $route['handler'];
+                    $handler = $route['handler'];
 
-                $runner = array_reduce(array_reverse($pipeline), function($next, $mw){
-                    return function(Request $req) use ($mw, $next){
-                        return $mw($req, $next);
-                    };
-                }, function(Request $req) use ($handler, $params) {
-                    if (is_array($handler) && is_string($handler[0])) {
-                        $obj = new $handler[0];
-                        $method = $handler[1];
-                        $result = $obj->$method(...$params);
-                    } elseif (is_callable($handler)) {
-                        $result = $handler(...$params);
-                    } else {
-                        throw new \RuntimeException("Invalid route handler");
-                    }
+                    // Route-specific middleware pipeline
+                    $routePipeline = $route['middleware'] ?? [];
+                    $runner = array_reduce(array_reverse($routePipeline), function($next, $mw){
+                        return function(Request $req) use ($mw, $next){
+                            return $mw($req, $next);
+                        };
+                    }, function(Request $req) use ($handler, $params) {
+                        if (is_array($handler) && is_string($handler[0])) {
+                            $obj = new $handler[0];
+                            $method = $handler[1];
+                            $result = $obj->$method(...$params);
+                        } elseif (is_callable($handler)) {
+                            $result = $handler(...$params);
+                        } else {
+                            throw new \RuntimeException("Invalid route handler");
+                        }
+                        if ($result instanceof Response) return $result;
+                        return new Response((string)$result);
+                    });
 
-                    if ($result instanceof Response) return $result;
-                    return new Response((string)$result);
-                });
-
-                return $runner($req);
+                    return $runner($req);
+                }
             }
-        }
-        return new Response('<h1>404 Not Found</h1>', 404);
+            // Hiçbir rota eşleşmediyse 404
+            return new Response('<h1>404 Not Found</h1>', 404);
+        };
+
+        // GLOBAL PIPELINE: Her istekte koşsun (redirect/normalizer burada çalışır)
+        $globalRunner = array_reduce(array_reverse($this->globalMiddleware), function($next, $mw){
+            return function(Request $req) use ($mw, $next){
+                return $mw($req, $next);
+            };
+        }, $resolver);
+
+        return $globalRunner($req);
     }
 }
