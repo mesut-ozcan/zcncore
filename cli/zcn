@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 $base = __DIR__ . '/..';
 
-// minimal autoload
+// helpers & autoload
 require $base . '/core/Helpers.php';
 spl_autoload_register(function ($class) use ($base) {
     $map = ['Core\\' => '/core/', 'App\\' => '/app/', 'Modules\\' => '/modules/'];
@@ -19,6 +19,7 @@ spl_autoload_register(function ($class) use ($base) {
 Core\Application::boot($base);
 
 $cmd = $argv[1] ?? 'help';
+$arg = $argv[2] ?? null;
 
 switch ($cmd) {
     case 'help':
@@ -26,6 +27,10 @@ switch ($cmd) {
         echo "  php cli/zcn cache:clear\n";
         echo "  php cli/zcn module:list\n";
         echo "  php cli/zcn make:module Name\n";
+        echo "  php cli/zcn make:migration Name\n";
+        echo "  php cli/zcn migrate\n";
+        echo "  php cli/zcn migrate:rollback\n";
+        echo "  php cli/zcn migrate:status\n";
         exit(0);
 
     case 'cache:clear':
@@ -45,7 +50,7 @@ switch ($cmd) {
         exit(0);
 
     case 'make:module':
-        $name = $argv[2] ?? null;
+        $name = $arg;
         if (!$name) { echo "Usage: php cli/zcn make:module Name\n"; exit(1); }
         $modDir = $base . '/modules/' . $name;
         @mkdir($modDir.'/Http/Controllers', 0777, true);
@@ -57,6 +62,60 @@ switch ($cmd) {
         ], JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
         file_put_contents("$modDir/routes.php", "<?php\n// add routes for $name\n");
         echo "Module skeleton created: modules/$name\n";
+        exit(0);
+
+    case 'make:migration':
+        $name = $arg ?: 'NewMigration';
+        @mkdir($base.'/app/Migrations', 0777, true);
+        $ts = date('Ymd_His');
+        $file = $base."/app/Migrations/{$ts}_" . preg_replace('/\W+/','_', $name) . ".php";
+        $tpl = <<<'PHP'
+<?php
+return new class {
+    public function up(PDO $pdo){
+        // example:
+        // $pdo->exec("CREATE TABLE demo_items (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(120) NOT NULL)");
+    }
+    public function down(PDO $pdo){
+        // example:
+        // $pdo->exec("DROP TABLE IF EXISTS demo_items");
+    }
+};
+PHP;
+        file_put_contents($file, $tpl);
+        echo "Created: app/Migrations/" . basename($file) . "\n";
+        exit(0);
+
+    case 'migrate':
+        try {
+            (new Core\Migrations\MigrationRunner())->migrate();
+        } catch (Throwable $e) {
+            fwrite(STDERR, "Migrate error: ".$e->getMessage()."\n");
+            exit(1);
+        }
+        exit(0);
+
+    case 'migrate:rollback':
+        try {
+            (new Core\Migrations\MigrationRunner())->rollback();
+        } catch (Throwable $e) {
+            fwrite(STDERR, "Rollback error: ".$e->getMessage()."\n");
+            exit(1);
+        }
+        exit(0);
+
+    case 'migrate:status':
+        try {
+            $list = (new Core\Migrations\MigrationRunner())->status();
+            foreach ($list as $row) {
+                $flag = $row['applied'] ? '[x]' : '[ ]';
+                $batch = $row['batch'] !== null ? " (batch {$row['batch']})" : '';
+                echo "{$flag} {$row['name']}{$batch}\n";
+            }
+        } catch (Throwable $e) {
+            fwrite(STDERR, "Status error: ".$e->getMessage()."\n");
+            exit(1);
+        }
         exit(0);
 
     default:
