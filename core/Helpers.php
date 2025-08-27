@@ -129,3 +129,32 @@ if (!function_exists('view_cached')) {
         });
     }
 }
+if (!function_exists('mail_send')) {
+    function mail_send(string $to, string $subject, string $html, ?string $text = null, array $headersExtra = []): bool {
+        return \Core\Mail\Mailer::send($to, $subject, $html, $text, $headersExtra);
+    }
+}
+if (!function_exists('asset')) {
+    /**
+     * Varyant: asset('/themes/default/assets/css/app.css', true) => absolute URL
+     */
+    function asset(string $path, bool $absolute = false): string {
+        $path = trim($path);
+        if ($path === '') return '';
+        // Web path
+        $web = $path[0] === '/' ? $path : '/'.$path;
+        // Local path: proje kökünden çöz
+        $local = base_path(ltrim($web, '/'));
+        $ver = null;
+        if (is_file($local)) {
+            $mt = @filemtime($local);
+            if ($mt) $ver = dechex($mt);
+        }
+        $url = $web . ($ver ? (str_contains($web,'?') ? '&' : '?') . 'v=' . $ver : '');
+        if ($absolute) {
+            $base = rtrim((string)\Core\Config::get('app.url',''), '/');
+            if ($base) $url = $base . $url;
+        }
+        return $url;
+    }
+}

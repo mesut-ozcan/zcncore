@@ -1,155 +1,236 @@
 #!/usr/bin/env php
 <?php
-declare(strict_types=1);
+/**
+ * ZCNCore CLI
+ * Usage:
+ *   php cli/zcn <command> [args]
+ */
 
-$base = __DIR__ . '/..';
+/* ---------- Proje kökü ---------- */
+$__base = realpath(__DIR__ . '/..');
+if ($__base === false) {
+    $__base = dirname(__DIR__);
+}
+define('ZCN_BASE', $__base);
 
-// helpers & autoload
-require $base . '/core/Helpers.php';
-spl_autoload_register(function ($class) use ($base) {
-    $map = ['Core\\' => '/core/', 'App\\' => '/app/', 'Modules\\' => '/modules/'];
-    foreach ($map as $p=>$dir){
-        if (strncmp($class,$p,strlen($p))===0){
-            $path = $base . $dir . str_replace('\\','/',substr($class,strlen($p))) . '.php';
-            if (is_file($path)) require $path;
+/* ---------- Autoload ---------- */
+spl_autoload_register(function ($class) {
+    $map = [
+        'Core\\'    => ZCN_BASE . '/core/',
+        'App\\'     => ZCN_BASE . '/app/',
+        'Modules\\' => ZCN_BASE . '/modules/',
+    ];
+    foreach ($map as $prefix => $dir) {
+        if (strncmp($class, $prefix, strlen($prefix)) === 0) {
+            $rel  = substr($class, strlen($prefix));
+            $file = $dir . str_replace('\\', '/', $rel) . '.php';
+            if (is_file($file)) { require $file; return; }
         }
     }
 });
 
-Core\Application::boot($base);
+/* ---------- Yardımcılar ---------- */
+function cli_out(string $msg, int $exit = null) {
+    fwrite(STDOUT, $msg);
+    if ($exit !== null) exit($exit);
+}
+function cli_err(string $msg, int $exit = 1) {
+    fwrite(STDERR, $msg);
+    exit($exit);
+}
+function base_path(string $p = ''): string {
+    // Windows/Unix uyumlu birleştirme
+    $left = rtrim(ZCN_BASE, "/\\");
+    $right = ltrim($p, "/\\");
+    return $right === '' ? $left : $left . DIRECTORY_SEPARATOR . $right;
+}
 
-$cmd = $argv[1] ?? 'help';
-$arg = $argv[2] ?? null;
+/* ---------- Bootstrap: Env + Config ---------- */
+try {
+    if (class_exists(\Core\Env::class)) {
+        \Core\Env::load(base_path('.env'));
+    }
+    if (class_exists(\Core\Config::class)) {
+        \Core\Config::init(base_path('app/Config'), ZCN_BASE);
+    }
+    // NOT: Application örneği OLUŞTURMUYORUZ (ctor private olabilir)
+} catch (\Throwable $e) {
+    cli_err("[boot] ".$e->getMessage().PHP_EOL);
+}
 
+/* ---------- Argümanlar ---------- */
+$argv = $_SERVER['argv'] ?? [];
+$cmd  = $argv[1] ?? 'help';
+$arg1 = $argv[2] ?? null;
+$arg2 = $argv[3] ?? null;
+
+/* ---------- Komutlar ---------- */
 switch ($cmd) {
     case 'help':
-        echo "ZCN CLI\n";
-        echo "  php cli/zcn cache:clear\n";
-        echo "  php cli/zcn config:cache\n";
-        echo "  php cli/zcn config:clear\n";
-        echo "  php cli/zcn module:list\n";
-        echo "  php cli/zcn make:module Name\n";
-        echo "  php cli/zcn make:migration Name\n";
-        echo "  php cli/zcn migrate\n";
-        echo "  php cli/zcn migrate:rollback\n";
-        echo "  php cli/zcn migrate:status\n";
-        exit(0);
+    case '-h':
+    case '--help':
+        cli_out(<<<TXT
+ZCNCore CLI
 
-    case 'cache:clear':
-        array_map('unlink', glob($base.'/storage/cache/*.cache') ?: []);
-        echo "Cache cleared.\n";
-        exit(0);
+Kullanım:
+  php cli/zcn <komut> [argümanlar]
 
-    case 'config:cache':
-        Core\Config::cache();
-        echo "Config cached to storage/cache/config.cache.php\n";
-        exit(0);
+Genel:
+  help                         Bu yardım
+  version                      Çekirdek sürümü (bilgi amaçlı)
 
-    case 'config:clear':
-        Core\Config::clearCache();
-        echo "Config cache cleared.\n";
-        exit(0);
+Geliştirme:
+  serve [host:port]            Built-in dev server (public/ docroot)
 
-    case 'module:list':
-        if (!is_dir($base.'/modules')) { echo "No modules.\n"; exit(0); }
-        foreach (scandir($base.'/modules') as $m) {
-            if ($m==='.'||$m==='..') continue;
-            $p = "$base/modules/$m/module.json";
-            if (is_file($p)) {
-                $meta = json_decode(file_get_contents($p), true) ?: [];
-                $en = array_key_exists('enabled',$meta) ? ($meta['enabled'] ? 'on':'off') : 'on';
-                echo "- {$meta['name']} ({$meta['version']}) [{$en}]\n";
-            }
+Config:
+  config:cache                 Config dosyalarını cache'e yazar
+  config:clear                 Config cache temizler
+
+Veritabanı (Migrations):
+  migrate                      Tüm bekleyen migration'ları uygular
+  migrate:status               Migration durumunu listeler
+  migrate:rollback             Son batch'i geri alır
+  make:migration <Name>        Yeni migration iskeleti oluşturur
+
+Queue:
+  queue:work [max] [sleep]     File driver kuyruğunu tüket (max iş / uyku sn)
+
+TXT
+        , 0);
+        break;
+
+    case 'version':
+        // Application private ctor olabilir; güvenli yol: Config veya fallback
+        $v = \Core\Config::get('app.version');
+        if (!$v && class_exists(\Core\Application::class)) {
+            // Erişilebilir bir sabit/yöntem yoksa "unknown" göster.
+            $v = 'unknown';
         }
-        exit(0);
+        cli_out("ZCNCore version: ".($v ?: 'unknown')."\n", 0);
+        break;
 
-    case 'make:module':
-        $name = $arg;
-        if (!$name) { echo "Usage: php cli/zcn make:module Name\n"; exit(1); }
-        $modDir = $base . '/modules/' . $name;
-        @mkdir($modDir.'/Http/Controllers', 0777, true);
-        @mkdir($modDir.'/Views', 0777, true);
-        @mkdir($modDir.'/Migrations', 0777, true);
-        file_put_contents("$modDir/module.json", json_encode([
-            'name'=>$name,'slug'=>$name,'version'=>'0.1.0','enabled'=>true,
-            'routes'=>['routes.php'],'migrations'=>[],'permissions'=>[],'dependencies'=>[]
-        ], JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
-        file_put_contents("$modDir/routes.php", "<?php\n// add routes for $name\n");
-        echo "Module skeleton created: modules/$name\n";
-        exit(0);
-
-    case 'make:migration':
-        $name = $arg ?: 'NewMigration';
-        @mkdir($base.'/app/Migrations', 0777, true);
-        $ts = date('Ymd_His');
-        $file = $base."/app/Migrations/{$ts}_" . preg_replace('/\W+/','_', $name) . ".php";
-        $tpl = <<<'PHP'
-<?php
-return new class {
-    public function up(PDO $pdo){
-        // example:
-        // $pdo->exec("CREATE TABLE demo_items (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(120) NOT NULL)");
-    }
-    public function down(PDO $pdo){
-        // example:
-        // $pdo->exec("DROP TABLE IF EXISTS demo_items");
-    }
-};
-PHP;
-        file_put_contents($file, $tpl);
-        echo "Created: app/Migrations/" . basename($file) . "\n";
-        exit(0);
-
-    case 'migrate':
-        try {
-            (new Core\Migrations\MigrationRunner())->migrate();
-        } catch (Throwable $e) {
-            fwrite(STDERR, "Migrate error: ".$e->getMessage()."\n");
-            exit(1);
-        }
-        exit(0);
-
-    case 'migrate:rollback':
-        try {
-            (new Core\Migrations\MigrationRunner())->rollback();
-        } catch (Throwable $e) {
-            fwrite(STDERR, "Rollback error: ".$e->getMessage()."\n");
-            exit(1);
-        }
-        exit(0);
-
-    case 'migrate:status':
-        try {
-            $list = (new Core\Migrations\MigrationRunner())->status();
-            foreach ($list as $row) {
-                $flag = $row['applied'] ? '[x]' : '[ ]';
-                $batch = $row['batch'] !== null ? " (batch {$row['batch']})" : '';
-                echo "{$flag} {$row['name']}{$batch}\n";
-            }
-        } catch (Throwable $e) {
-            fwrite(STDERR, "Status error: ".$e->getMessage()."\n");
-            exit(1);
-        }
-        exit(0);
-
-    case 'rate:clear':
-        (new Core\Support\RateLimiter($base.'/storage/ratelimit'))->clearAll();
-        echo "Rate-limit storage cleared.\n";
-        exit(0);        
-
+    /* ---------- DEV SERVER ---------- */
     case 'serve':
-        $host = $arg ?: '127.0.0.1:8000';
+        $host = $arg1 ?: '127.0.0.1:8000';
         if (!preg_match('/^\d{1,3}(\.\d{1,3}){3}:\d{2,5}$/', $host)) {
             $host = '127.0.0.1:8000';
         }
-        $docroot = $base . '/public';
-        echo "Dev server: http://{$host} (docroot: {$docroot})\nHit Ctrl+C to stop.\n";
-        // Windows/macOS/Linux için basit passthru
-        $cmd = 'php -S ' . $host . ' -t ' . escapeshellarg($docroot);
-        passthru($cmd, $exitCode);
-        exit($exitCode);
+        $docroot = base_path('public');
+        cli_out("Dev server: http://{$host}\nDocroot: {$docroot}\nCtrl+C ile durdur.\n");
+        $cmdline = 'php -S ' . $host . ' -t ' . escapeshellarg($docroot);
+        passthru($cmdline, $code);
+        exit($code);
 
+    /* ---------- CONFIG CACHE ---------- */
+    case 'config:cache':
+        try {
+            \Core\Config::cache();
+            cli_out("Config cached.\n", 0);
+        } catch (\Throwable $e) {
+            cli_err("Config cache error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    case 'config:clear':
+        try {
+            \Core\Config::clearCache();
+            cli_out("Config cache cleared.\n", 0);
+        } catch (\Throwable $e) {
+            cli_err("Config clear error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    /* ---------- MIGRATIONS ---------- */
+    case 'migrate':
+        try {
+            if (class_exists(\Core\Database\Migrator::class)) {
+                \Core\Database\Migrator::migrate();
+                cli_out("Migration complete.\n", 0);
+            } else {
+                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
+            }
+        } catch (\Throwable $e) {
+            cli_err("Migrate error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    case 'migrate:status':
+        try {
+            if (class_exists(\Core\Database\Migrator::class)) {
+                \Core\Database\Migrator::status();
+                exit(0);
+            } else {
+                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
+            }
+        } catch (\Throwable $e) {
+            cli_err("Status error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    case 'migrate:rollback':
+        try {
+            if (class_exists(\Core\Database\Migrator::class)) {
+                \Core\Database\Migrator::rollback();
+                cli_out("Rollback complete.\n", 0);
+            } else {
+                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
+            }
+        } catch (\Throwable $e) {
+            cli_err("Rollback error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    case 'make:migration':
+        $name = $arg1 ?: null;
+        if (!$name) cli_err("Kullanım: php cli/zcn make:migration <Name>\n");
+        try {
+            if (class_exists(\Core\Database\Migrator::class)) {
+                \Core\Database\Migrator::make($name);
+                cli_out("Created migration: {$name}\n", 0);
+            } else {
+                // Basit fallback: dosya oluştur
+                $ts = date('Ymd_His');
+                $dir = base_path('database/migrations');
+                if (!is_dir($dir)) @mkdir($dir, 0777, true);
+                $file = $dir . '/' . $ts . '_' . preg_replace('/\W+/', '_', $name) . '.php';
+                $tpl = <<<PHP
+<?php
+return new class {
+    public function up(\\PDO \$db): void
+    {
+        // TODO: up
+    }
+    public function down(\\PDO \$db): void
+    {
+        // TODO: down
+    }
+};
+PHP;
+                file_put_contents($file, $tpl);
+                cli_out("Created migration (fallback): {$file}\n", 0);
+            }
+        } catch (\Throwable $e) {
+            cli_err("Make migration error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    /* ---------- QUEUE WORKER ---------- */
+    case 'queue:work':
+        $max   = (int)($arg1 ?? 0);
+        $sleep = (int)($arg2 ?? 2);
+        try {
+            if (!class_exists(\Core\Queue\Queue::class)) {
+                cli_err("Queue modülü bulunamadı: Core\\Queue\\Queue\n");
+            }
+            cli_out("Queue worker started (max={$max}, sleep={$sleep}s)\n");
+            \Core\Queue\Queue::work($max, $sleep);
+            cli_out("Queue worker finished.\n", 0);
+        } catch (\Throwable $e) {
+            cli_err("Queue error: ".$e->getMessage()."\n");
+        }
+        break;
+
+    /* ---------- BİLİNMEYEN ---------- */
     default:
-        echo "Unknown command: $cmd\n";
-        exit(1);
+        cli_err("Bilinmeyen komut: {$cmd}\n'php cli/zcn help' ile komutları görebilirsin.\n");
 }

@@ -6,12 +6,13 @@ final class Application
     private static ?Application $instance = null;
     private string $basePath;
     private array $container = [];
-    private string $version = '2.5.0';
+    private string $version = '2.7.0';
     private float $startedAt;
 
     private function __construct(string $basePath)
     {
-        $this->basePath = rtrim($basePath, '/');
+        // Windows + Unix uyumlu
+        $this->basePath = rtrim($basePath, "/\\");
         $this->startedAt = microtime(true);
     }
 
@@ -19,12 +20,24 @@ final class Application
     {
         if (!self::$instance) {
             self::$instance = new Application($basePath);
-            Env::load($basePath . '/.env');
-            Config::init($basePath . '/app/Config', $basePath);
-            Logger::init($basePath . '/storage/logs');
-            Cache::init($basePath . '/storage/cache');
-            Events::init();
-            Head::init();
+
+            // Ortam ve config
+            Env::load(self::$instance->basePath('.env'));
+            Config::init(self::$instance->basePath('app/Config'), self::$instance->basePath());
+
+            // Logger::init(...) KALDIRILDI — v2.7.0'da yok; ilk log çağrısında Logger::boot() otomatik olur.
+            // Logger::info('app booted'); // istersen böyle tetikleyebilirsin
+
+            // Diğer servis bootstrap'ları (projene göre mevcutsa)
+            if (class_exists(\Core\Cache::class) && method_exists(\Core\Cache::class, 'init')) {
+                Cache::init(self::$instance->basePath('storage/cache'));
+            }
+            if (class_exists(\Core\Events::class) && method_exists(\Core\Events::class, 'init')) {
+                Events::init();
+            }
+            if (class_exists(\Core\Head::class) && method_exists(\Core\Head::class, 'init')) {
+                Head::init();
+            }
         }
         return self::$instance;
     }
@@ -39,7 +52,7 @@ final class Application
 
     public function basePath(string $path = ''): string
     {
-        return $this->basePath . ($path ? '/' . ltrim($path, '/') : '');
+        return $this->basePath . ($path ? '/' . ltrim($path, '/\\') : '');
     }
 
     public function bind(string $id, $service): void
