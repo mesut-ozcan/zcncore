@@ -2,7 +2,7 @@
 namespace Modules\Users\Http\Controllers;
 
 use Core\Response;
-use Modules\Users\Services\UserStore;
+use Modules\Users\Services\UserRepository;
 
 class AuthController
 {
@@ -16,8 +16,9 @@ class AuthController
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
 
-        $user = UserStore::findByEmail($email);
-        if (!$user || !password_verify($password, $user['password'])) {
+        $repo = new UserRepository();
+        $user = $repo->verify($email, $password);
+        if (!$user) {
             return new Response(view('Users::login', [
                 'title' => 'Giriş Yap',
                 'error' => 'E-posta veya şifre hatalı.'
@@ -25,6 +26,7 @@ class AuthController
         }
 
         $_SESSION['user'] = [
+            'id'    => (int)$user['id'],
             'email' => $user['email'],
             'name'  => $user['name'],
             'role'  => $user['role'],
@@ -52,7 +54,8 @@ class AuthController
         }
 
         try {
-            $user = UserStore::create($email, $password, $name, 'user');
+            $repo = new UserRepository();
+            $user = $repo->create($email, $password, $name, 'user');
         } catch (\Throwable $e) {
             return new Response(view('Users::register', [
                 'title' => 'Kayıt Ol',
@@ -60,8 +63,8 @@ class AuthController
             ]), 409);
         }
 
-        // Auto-login
         $_SESSION['user'] = [
+            'id'    => (int)$user['id'],
             'email' => $user['email'],
             'name'  => $user['name'],
             'role'  => $user['role'],

@@ -5,6 +5,7 @@ use App\Middleware\CsrfMiddleware;
 use Modules\Users\Http\Controllers\AuthController;
 use Modules\Users\Http\Controllers\AccountController;
 use Modules\Users\Http\Controllers\AdminController;
+use Modules\Users\Http\Controllers\PasswordResetController;
 
 use Modules\Users\Middleware\AuthMiddleware;
 use Modules\Users\Middleware\AdminOnlyMiddleware;
@@ -27,6 +28,14 @@ $router->get('/register',  [AuthController::class, 'showRegister']);
 $router->post('/register', [AuthController::class, 'register'], $csrf);
 
 $router->post('/logout',   [AuthController::class, 'logout'],   $csrf);
+
+/**
+ * Password reset
+ */
+$router->get('/password/forgot',            [PasswordResetController::class, 'showForgot']);
+$router->post('/password/forgot',           [PasswordResetController::class, 'send'],   $csrf);
+$router->get('/password/reset/{token}',     [PasswordResetController::class, 'showReset']);
+$router->post('/password/reset/{token}',    [PasswordResetController::class, 'reset'],  $csrf);
 
 /**
  * Protected pages
