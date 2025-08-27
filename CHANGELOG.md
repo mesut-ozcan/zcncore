@@ -1,3 +1,9 @@
+## 2.4.0
+- Session: Flash & Old Input altyapısı (`flash()`, `old()`, `errors()`), `Session::boot()`
+- Router: FormRequest başarısızlığında HTML istekleri için **geri yönlendirme** + old & errors flash; JSON istekleri için 422 JSON
+- CSRF: JSON isteklerinde standart hata gövdesi (HTTP 419), HTML’de flash+redirect
+- Theme: `flash` component; layout’a ekleyerek mesajları göster
+
 ## 2.3.0
 - Router: Controller action param’larında **FormRequest** otomatik çözümleme + otomatik validation; hata → 422 (JSON isteyenlere JSON)
 - Router: Middleware alias’ı **class-string** kabul eder ve gerektiğinde instantiate eder

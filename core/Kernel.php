@@ -13,6 +13,7 @@ class Kernel
     public function __construct(Application $app)
     {
         $this->app = $app;
+        \Core\Session::boot();
         $this->router = new Router();
         $this->registerErrorHandler();
         $this->registerBaseBindings();

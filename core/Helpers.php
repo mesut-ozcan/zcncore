@@ -100,3 +100,20 @@ if (!function_exists('paginate')) {
         return \Core\Support\Paginator::make($total, $per, $page, $baseUrl, $query);
     }
 }
+if (!function_exists('session_get')) {
+    function session_get(string $key, $default = null) { return \Core\Session::get($key, $default); }
+}
+if (!function_exists('flash')) {
+    // set: flash('key','val') ; get: flash('key')
+    function flash(string $key, $value = null) {
+        if (func_num_args() === 1) { return \Core\Session::pullFlash($key); }
+        \Core\Session::flash($key, $value);
+        return true;
+    }
+}
+if (!function_exists('old')) {
+    function old(string $key, $default = null) { return \Core\Session::old($key, $default); }
+}
+if (!function_exists('errors')) {
+    function errors(): array { return \Core\Session::errors(); }
+}

@@ -250,19 +250,22 @@ class Router
                     /** @var FormRequest $fr */
                     $fr = new $t(Request::current() ?: Request::capture());
                     if ($fr->fails()) {
-                        // Hata: JSON isteyenlere JSON, aksi halde basit HTML 422
                         $wants = (Request::current()?->wantsJson()) ?? false;
                         if ($wants) {
-                            (new Response(
+                            (new \Core\Response(
                                 json_encode(['ok'=>false,'errors'=>$fr->errors()], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
                                 422,
                                 ['Content-Type'=>'application/json; charset=UTF-8']
                             ))->send();
-                        } else {
-                            $html = "<h1>422 Unprocessable Entity</h1><pre>".e(var_export($fr->errors(), true))."</pre>";
-                            (new Response($html, 422))->send();
+                            exit;
                         }
-                        exit; // zinciri kır
+                        // HTML istek: old & errors set ve geri dön
+                        \Core\Session::setOld((Request::current()?->all()) ?? []);
+                        \Core\Session::setErrors($fr->errors());
+
+                        $back = Request::current()?->server['HTTP_REFERER'] ?? (Request::current()?->path() ?? '/');
+                        \Core\Response::redirect($back, 302)->send();
+                        exit;
                     }
                     $out[] = $fr;
                     continue;

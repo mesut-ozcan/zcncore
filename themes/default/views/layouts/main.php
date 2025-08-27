@@ -10,11 +10,8 @@
     $desc  = 'Minimal Saf PHP çekirdek framework — module/theme ile esnek.';
     $canon = $base ? $base . ($_SERVER['REQUEST_URI'] ?? '/') : '';
 
-    // Head içeriği eksikse tamamla
     \Core\Head::addProperty('og:type', 'website');
-    if ($canon) {
-        \Core\Head::addProperty('og:url', $canon);
-    }
+    if ($canon) \Core\Head::addProperty('og:url', $canon);
     if ($title) {
         \Core\Head::addProperty('og:title', $title);
         \Core\Head::addProperty('twitter:title', $title);
@@ -51,6 +48,7 @@
   </header>
 
   <main class="container">
+    <?= component('flash') ?>  <!-- 🔔 Flash mesajlar burada görünecek -->
     <?= isset($content) ? $content : '' ?>
   </main>
 
