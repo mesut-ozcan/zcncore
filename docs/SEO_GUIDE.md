@@ -3,16 +3,11 @@
 ## Core
 - Canonical host & trailing-slash normalization (Kernel middleware).
 - Head manager: set `title/description/canonical/robots`, render via `<?= head()->render() ?>`.
-- `/sitemap.xml` & `/robots.txt` are served by registries that modules can populate.
+- NEW: `Head::addProperty('og:title','...')` ve `Head::addProperty('twitter:card','summary')` gibi OG/Twitter desteği.
+- `/sitemap.xml` & `/robots.txt` registries.
 
 ## Module (SEO)
-- Optional admin UI for meta tags, redirects manager, JSON-LD presets.
-- Add URLs to `SitemapRegistry::add([...])`, lines to `RobotsRegistry::add("Disallow: /x")`.
-
-## Theme
-- Controls `<title>` formatting, OG/Twitter tags template, layout markup.
-
-Checklist:
-- Search results pages → `noindex,follow`.
-- Canonical is self-referential by default.
-- Split sitemaps for >50k URLs; cache results.
+- Modüller sitemap/robots verisi ekleyebilir:
+  ```php
+  \Core\SEO\SitemapRegistry::add(['loc'=>config('app.url').'/products', 'changefreq'=>'weekly']);
+  \Core\SEO\RobotsRegistry::add('Disallow: /admin');

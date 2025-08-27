@@ -1,0 +1,11 @@
+{
+  "name": "Logs",
+  "slug": "Logs",
+  "version": "0.1.0",
+  "description": "Admin log viewer for app.log",
+  "providers": [],
+  "routes": ["routes.php"],
+  "migrations": [],
+  "permissions": ["logs.read"],
+  "dependencies": []
+}

@@ -8,7 +8,8 @@ final class Head
         'description' => '',
         'canonical' => '',
         'robots' => 'index,follow',
-        'meta' => []
+        'meta' => [],       // name => content
+        'props' => []       // property => content (og:*, twitter:*)
     ];
 
     public static function init(): void
@@ -18,7 +19,8 @@ final class Head
             'description' => '',
             'canonical' => '',
             'robots' => 'index,follow',
-            'meta' => []
+            'meta' => [],
+            'props' => []
         ];
     }
 
@@ -26,7 +28,9 @@ final class Head
     public static function setDescription(string $d){ self::$state['description']=$d; }
     public static function setCanonical(string $c){ self::$state['canonical']=$c; }
     public static function setRobots(string $r){ self::$state['robots']=$r; }
+
     public static function addMeta(string $name, string $content){ self::$state['meta'][$name]=$content; }
+    public static function addProperty(string $property, string $content){ self::$state['props'][$property]=$content; } // NEW
 
     public static function render(): string
     {
@@ -37,6 +41,9 @@ final class Head
         if (self::$state['robots']) $out[] = '<meta name="robots" content="'.e(self::$state['robots']).'">';
         foreach (self::$state['meta'] as $k=>$v) {
             $out[] = '<meta name="'.e($k).'" content="'.e($v).'">';
+        }
+        foreach (self::$state['props'] as $k=>$v) {
+            $out[] = '<meta property="'.e($k).'" content="'.e($v).'">'; // OG/Twitter
         }
         return implode("\n", $out);
     }
