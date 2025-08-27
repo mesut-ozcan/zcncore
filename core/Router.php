@@ -1,11 +1,18 @@
 <?php
 namespace Core;
 
+use Core\Validation\FormRequest;
+use ReflectionClass;
+use ReflectionFunction;
+use ReflectionMethod;
+use ReflectionNamedType;
+use ReflectionParameter;
+
 class Router
 {
     private array $routes = ['GET'=>[], 'POST'=>[], 'PUT'=>[], 'DELETE'=>[]];
     private array $globalMiddleware = [];
-    private array $mwAliases = []; // name => callable
+    private array $mwAliases = []; // name => callable|string (class-string)
 
     /** @var array<string, array{method:string,pattern:string,handler:mixed,middleware:array,regex:string,paramNames:array}> */
     private array $named = [];
@@ -13,9 +20,12 @@ class Router
     // Group stacks
     private array $prefixStack = [''];
     private array $mwStack = [[]];
-    private array $namePrefixStack = ['']; // <— NEW
+    private array $namePrefixStack = [''];
 
-    public function alias(string $name, callable $mw): void
+    /**
+     * @param callable|string $mw callable veya class-string
+     */
+    public function alias(string $name, $mw): void
     {
         $this->mwAliases[$name] = $mw;
     }
@@ -27,10 +37,6 @@ class Router
 
     /**
      * Grup: prefix + middleware + name prefix
-     * @param string $prefix URL prefix (örn: /admin)
-     * @param array $middleware alias/callable dizisi
-     * @param callable $callback fn(Router $r)
-     * @param string $namePrefix route adı ön eki (örn: 'admin.')
      */
     public function group(string $prefix, array $middleware, callable $callback, string $namePrefix = ''): void
     {
@@ -53,7 +59,7 @@ class Router
 
     public function add(string $method, string $pattern, $handler, array $middleware = [], ?string $name = null): void
     {
-        // group prefix uygula
+        // group prefix
         $prefix = end($this->prefixStack);
         $pattern = rtrim($prefix, '/') . '/' . ltrim($pattern, '/');
         if ($pattern === '') $pattern = '/';
@@ -70,7 +76,7 @@ class Router
         $this->routes[strtoupper($method)][] = $item;
 
         if ($name) {
-            $fullName = end($this->namePrefixStack) . $name; // <— name prefix uygula
+            $fullName = end($this->namePrefixStack) . $name;
             $this->named[$fullName] = $item;
         }
     }
@@ -98,12 +104,27 @@ class Router
         return [$regex, $paramNames];
     }
 
+    /**
+     * @param array<int, callable|string> $list
+     * @return array<int, callable>
+     */
     private function resolveMiddlewareList(array $list): array
     {
         $out = [];
         foreach ($list as $mw) {
-            if (is_string($mw) && isset($this->mwAliases[$mw])) {
-                $out[] = $this->mwAliases[$mw];
+            if (is_string($mw)) {
+                // alias ismi olabilir
+                if (isset($this->mwAliases[$mw])) {
+                    $mwAlias = $this->mwAliases[$mw];
+                    if (is_string($mwAlias) && class_exists($mwAlias)) {
+                        $out[] = new $mwAlias();
+                    } elseif (is_callable($mwAlias)) {
+                        $out[] = $mwAlias;
+                    }
+                } elseif (class_exists($mw)) {
+                    // doğrudan class-string verilmiş
+                    $out[] = new $mw();
+                }
             } elseif (is_callable($mw)) {
                 $out[] = $mw;
             }
@@ -160,15 +181,29 @@ class Router
                             return $mw($req, $next);
                         };
                     }, function(Request $req) use ($handler, $args) {
+                        // ---- Handler çağrısı (FormRequest injection) ----
                         if (is_array($handler) && is_string($handler[0])) {
                             $obj = new $handler[0];
                             $method = $handler[1];
-                            $result = $obj->$method(...$args);
+
+                            $ref = new ReflectionMethod($obj, $method);
+                            $finalArgs = $this->resolveParameters($ref, $args);
+
+                            $result = $obj->$method(...$finalArgs);
                         } elseif (is_callable($handler)) {
-                            $result = $handler(...$args);
+                            // Closure veya function
+                            if (is_array($handler) && is_object($handler[0])) {
+                                $ref = new ReflectionMethod($handler[0], $handler[1]);
+                            } else {
+                                $ref = new ReflectionFunction($handler);
+                            }
+                            $finalArgs = $this->resolveParameters($ref, $args);
+
+                            $result = $handler(...$finalArgs);
                         } else {
                             throw new \RuntimeException("Invalid route handler");
                         }
+
                         if ($result instanceof Response) return $result;
                         return new Response((string)$result);
                     });
@@ -186,5 +221,70 @@ class Router
         }, $resolver);
 
         return $globalRunner($req);
+    }
+
+    /**
+     * @param ReflectionMethod|ReflectionFunction $ref
+     * @param array<int, mixed> $routeArgs
+     * @return array<int, mixed>
+     */
+    private function resolveParameters($ref, array $routeArgs): array
+    {
+        $params = $ref->getParameters();
+        $out = [];
+        $routeIdx = 0;
+
+        foreach ($params as $p) {
+            $type = $p->getType();
+            if ($type instanceof ReflectionNamedType) {
+                $t = $type->getName();
+
+                // Request
+                if ($t === Request::class || $t === '\\Core\\Request') {
+                    $out[] = Request::current() ?: Request::capture();
+                    continue;
+                }
+
+                // FormRequest subclass
+                if (class_exists($t) && is_subclass_of($t, FormRequest::class)) {
+                    /** @var FormRequest $fr */
+                    $fr = new $t(Request::current() ?: Request::capture());
+                    if ($fr->fails()) {
+                        // Hata: JSON isteyenlere JSON, aksi halde basit HTML 422
+                        $wants = (Request::current()?->wantsJson()) ?? false;
+                        if ($wants) {
+                            (new Response(
+                                json_encode(['ok'=>false,'errors'=>$fr->errors()], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+                                422,
+                                ['Content-Type'=>'application/json; charset=UTF-8']
+                            ))->send();
+                        } else {
+                            $html = "<h1>422 Unprocessable Entity</h1><pre>".e(var_export($fr->errors(), true))."</pre>";
+                            (new Response($html, 422))->send();
+                        }
+                        exit; // zinciri kır
+                    }
+                    $out[] = $fr;
+                    continue;
+                }
+            }
+
+            // Tip yoksa veya farklı tipse → route argümanı tüket
+            if (array_key_exists($routeIdx, $routeArgs)) {
+                $out[] = $routeArgs[$routeIdx++];
+            } elseif ($p->isDefaultValueAvailable()) {
+                $out[] = $p->getDefaultValue();
+            } else {
+                // Eksik param — boş string
+                $out[] = null;
+            }
+        }
+
+        // Ekstra route arg varsa ekle (geriye dönük uyum)
+        while (array_key_exists($routeIdx, $routeArgs)) {
+            $out[] = $routeArgs[$routeIdx++];
+        }
+
+        return $out;
     }
 }

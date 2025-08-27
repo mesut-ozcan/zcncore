@@ -1,3 +1,8 @@
+## 2.3.0
+- Router: Controller action param’larında **FormRequest** otomatik çözümleme + otomatik validation; hata → 422 (JSON isteyenlere JSON)
+- Router: Middleware alias’ı **class-string** kabul eder ve gerektiğinde instantiate eder
+- View: `pagination` component (themes/default/components/pagination.php) — `paginate()` çıktısını render eder
+
 ## 2.2.0
 - Router: Group içinde route **name prefix** desteği (`group('/admin', ..., ..., 'admin.')`)
 - Validation: **FormRequest** tabanı (rules/authorize/messages; `$request->validated()`)
