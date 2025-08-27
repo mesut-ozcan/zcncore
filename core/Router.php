@@ -5,6 +5,12 @@ class Router
 {
     private array $routes = ['GET'=>[], 'POST'=>[], 'PUT'=>[], 'DELETE'=>[]];
     private array $globalMiddleware = [];
+    private array $mwAliases = []; // name => callable
+
+    public function alias(string $name, callable $mw): void
+    {
+        $this->mwAliases[$name] = $mw;
+    }
 
     public function middleware(callable $mw): void
     {
@@ -24,9 +30,23 @@ class Router
 
     private function toRegex(string $pattern): string
     {
-        // Convert /pages/{slug} to regex
         $regex = preg_replace('#\{[^/]+\}#', '([^/]+)', $pattern);
         return '#^' . rtrim($regex, '/') . '/?$#';
+    }
+
+    private function resolveMiddlewareList(array $list): array
+    {
+        $out = [];
+        foreach ($list as $mw) {
+            if (is_string($mw) && isset($this->mwAliases[$mw])) {
+                $out[] = $this->mwAliases[$mw];
+            } elseif (is_callable($mw)) {
+                $out[] = $mw;
+            } else {
+                // desteklenmeyen tip geçilmişse atla
+            }
+        }
+        return $out;
     }
 
     public function dispatch(Request $req): Response
@@ -34,7 +54,6 @@ class Router
         $method = strtoupper($req->method);
         $path   = $req->path();
 
-        // ÇÖZÜCÜ: Rotayı bulup çalıştırır (eşleşmezse 404 döner).
         $resolver = function(Request $req) use ($method, $path): Response {
             foreach ($this->routes[$method] ?? [] as $route) {
                 if (preg_match($route['regex'], $path, $m)) {
@@ -43,8 +62,8 @@ class Router
 
                     $handler = $route['handler'];
 
-                    // Route-specific middleware pipeline
-                    $routePipeline = $route['middleware'] ?? [];
+                    // Route-specific middleware pipeline (alias çözümü ile)
+                    $routePipeline = $this->resolveMiddlewareList($route['middleware'] ?? []);
                     $runner = array_reduce(array_reverse($routePipeline), function($next, $mw){
                         return function(Request $req) use ($mw, $next){
                             return $mw($req, $next);
@@ -66,11 +85,10 @@ class Router
                     return $runner($req);
                 }
             }
-            // Hiçbir rota eşleşmediyse 404
             return new Response('<h1>404 Not Found</h1>', 404);
         };
 
-        // GLOBAL PIPELINE: Her istekte koşsun (redirect/normalizer burada çalışır)
+        // GLOBAL PIPELINE: Her istekte çalışır
         $globalRunner = array_reduce(array_reverse($this->globalMiddleware), function($next, $mw){
             return function(Request $req) use ($mw, $next){
                 return $mw($req, $next);

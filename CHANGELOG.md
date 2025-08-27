@@ -1,3 +1,15 @@
+## 1.9.0
+- Response: `file()` ile inline dosya sunumu; `ETag` ve `Last-Modified` başlıkları; `If-None-Match/If-Modified-Since` → 304
+- Upload: Görsellere max genişlik/yükseklik doğrulaması (config `upload.images`)
+- Request: `wantsJson()` / `expectsJson()` helper’ları
+- Kernel: Exception handler JSON algılaması `wantsJson()` ile
+
+## 1.8.0
+- Upload güvenliği: mime/uzantı doğrulama, güvenli dosya adı, `storage/uploads/YYYY/MM` altına taşıma
+- Cookie helpers: `cookie_set()`, `cookie_get()`; Response: `withCookie()` ile çoklu `Set-Cookie`
+- Dev server: `php cli/zcn serve [host:port]`
+- Response: header gönderimi çoklu satır desteği (özg. `Set-Cookie`)
+
 ## 1.7.1
 - Response: `private ?callable $streamer` → property type kaldırıldı, docblock ile işaretlendi (PHP uyumluluk fix).
 

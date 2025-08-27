@@ -3,45 +3,44 @@ namespace App\Middleware;
 
 use Core\Request;
 use Core\Response;
-use Core\Cache;
+use Core\Support\RateLimiter;
 
-/**
- * Basit IP+path bazlı throttle.
- * Login (POST /login):    5 deneme / 60s
- * Forgot (POST /password/forgot): 3 deneme / 600s
- * Reset (POST /password/reset/{token}): 5 deneme / 600s
- */
 class RateLimitMiddleware
 {
     public function __invoke(Request $req, callable $next)
     {
-        $method = strtoupper($req->method);
-        $path   = $req->path();
-        if ($method !== 'POST') {
+        if (strtoupper($req->method) !== 'POST') {
             return $next($req);
         }
 
-        $limit = 5; $decay = 60; // default
-        if (preg_match('#^/password/forgot$#', $path)) { $limit = 3; $decay = 600; }
-        if (preg_match('#^/password/reset/#', $path))  { $limit = 5; $decay = 600; }
+        $path = $req->path();
+        $cfg  = require base_path('app/Config/ratelimit.php');
 
-        $ip   = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        $key  = 'ratelimit:' . sha1($ip . '|' . $method . '|' . $path);
+        $limit = $cfg['default']['limit'];
+        $decay = $cfg['default']['decay'];
 
-        $hit = Cache::get($key, ['count'=>0,'reset'=>time()+$decay]);
-        if (!is_array($hit)) $hit = ['count'=>0,'reset'=>time()+$decay];
-
-        if ($hit['count'] >= $limit) {
-            $retry = max(1, $hit['reset'] - time());
-            $body  = "<h1>429 Too Many Requests</h1><p>Lütfen {$retry} saniye sonra tekrar deneyin.</p>";
-            return new Response($body, 429, ['Retry-After' => (string)$retry]);
+        foreach ($cfg['paths'] as $pattern => $rule) {
+            if (preg_match($pattern, $path)) {
+                $limit = $rule['limit'];
+                $decay = $rule['decay'];
+                break;
+            }
         }
 
-        $hit['count']++;
-        if ($hit['reset'] < time()) {
-            $hit = ['count'=>1, 'reset'=>time()+$decay];
+        $ip  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $key = $ip . '|' . $req->method . '|' . $path;
+
+        $store = new RateLimiter(base_path('storage/ratelimit'));
+        $state = $store->hit($key, $limit, $decay);
+
+        if ($state['count'] > $limit) {
+            $retry = max(1, $state['reset'] - time());
+            return new Response(
+                "<h1>429 Too Many Requests</h1><p>{$retry} saniye bekleyin.</p>",
+                429,
+                ['Retry-After' => (string)$retry]
+            );
         }
-        Cache::set($key, $hit, $decay);
 
         return $next($req);
     }

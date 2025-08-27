@@ -16,10 +16,21 @@ class Kernel
         $this->router = new Router();
         $this->registerErrorHandler();
         $this->registerBaseBindings();
+
+        // Middleware alias’ları (varsa)
+        $this->router->alias('csrf', new \App\Middleware\CsrfMiddleware());
+        $this->router->alias('throttle', new \App\Middleware\RateLimitMiddleware());
+        if (class_exists(\Modules\Users\Middleware\AuthMiddleware::class)) {
+            $this->router->alias('auth', new \Modules\Users\Middleware\AuthMiddleware());
+        }
+        if (class_exists(\Modules\Users\Middleware\AdminOnlyMiddleware::class)) {
+            $this->router->alias('admin', new \Modules\Users\Middleware\AdminOnlyMiddleware());
+        }
+
         $this->registerBaseRoutes();
         $this->loadModules();
 
-        // Redirect kuralları config'ten
+        // Redirect kuralları
         $redirConfig = $this->app->basePath('app/Config/redirects.php');
         if (is_file($redirConfig)) {
             $rules = require $redirConfig;
@@ -43,10 +54,26 @@ class Kernel
         set_exception_handler(function (\Throwable $e) {
             $debug = Config::get('app.debug', false);
             Logger::error($e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-            $body = $debug
-                ? "<h1>Exception</h1><pre>{$e}</pre>"
-                : "<h1>Server Error</h1><p>Something went wrong.</p>";
-            (new Response($body, 500))->send();
+
+            $req = Request::current();
+            $wantsJson = $req ? $req->wantsJson() : false;
+
+            if ($wantsJson) {
+                $payload = [
+                    'ok' => false,
+                    'error' => $debug ? (string)$e : 'Server Error',
+                    'message' => $e->getMessage(),
+                    'code' => $e->getCode(),
+                    'type' => (new \ReflectionClass($e))->getShortName(),
+                ];
+                (new Response(json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|($debug?JSON_PRETTY_PRINT:0)),
+                    500, ['Content-Type' => 'application/json; charset=UTF-8']))->send();
+            } else {
+                $body = $debug
+                    ? "<h1>Exception</h1><pre>{$e}</pre>"
+                    : "<h1>Server Error</h1><p>Something went wrong.</p>";
+                (new Response($body, 500))->send();
+            }
             exit;
         });
     }
@@ -75,26 +102,25 @@ class Kernel
         // Status endpoint (sadece debug açıkken)
         $this->router->get('/status', [\App\Http\Controllers\StatusController::class, 'index']);
 
-        // Canonical host / trailing slash normalizer + Redirect check
+        // Canonical host / trailing slash normalizer + Redirect + CSRF cookie
         $this->router->middleware(function (Request $req, callable $next) {
+            Csrf::ensureCookie();
+
             $hostCanonical = Config::get('app.canonical_host', '');
-            $slashPolicy   = Config::get('app.trailing_slash', 'none'); // none|add
+            $slashPolicy   = Config::get('app.trailing_slash', 'none');
 
             $uri  = $req->path();
             $host = $req->host();
 
-            // 0) Özel redirect kuralları (ÖNCE)
             if ($redir = RedirectRegistry::check($req)) {
                 return $redir;
             }
 
-            // 1) Host normalize
             if ($hostCanonical && $host !== $hostCanonical) {
                 $url = $req->scheme() . '://' . $hostCanonical . $req->fullUri();
                 return Response::redirect($url, 301);
             }
 
-            // 2) Trailing slash normalize
             if ($slashPolicy === 'add' && !str_ends_with($uri, '/')) {
                 return Response::redirect($req->url('/') . '/', 301);
             }
@@ -118,10 +144,27 @@ class Kernel
         $modulesDir = $this->app->basePath('modules');
         if (!is_dir($modulesDir)) return;
 
+        $overrides = [];
+        $overridePath = $this->app->basePath('app/Config/modules.php');
+        if (is_file($overridePath)) {
+            $ov = require $overridePath;
+            if (is_array($ov)) $overrides = $ov;
+        }
+
         foreach (scandir($modulesDir) as $mod) {
             if ($mod === '.' || $mod === '..') continue;
             $modulePath = $modulesDir . '/' . $mod;
-            if (is_dir($modulePath) && is_file($modulePath . '/module.json')) {
+            $jsonPath   = $modulePath . '/module.json';
+
+            if (is_dir($modulePath) && is_file($jsonPath)) {
+                $meta = json_decode((string)file_get_contents($jsonPath), true) ?: [];
+                $slug = $meta['slug'] ?? $mod;
+                $enabled = $meta['enabled'] ?? true;
+                if (array_key_exists($slug, $overrides)) {
+                    $enabled = (bool)$overrides[$slug];
+                }
+                if (!$enabled) { continue; }
+
                 $routes = $modulePath . '/routes.php';
                 if (is_file($routes)) {
                     require $routes;

@@ -1,34 +1,101 @@
 <?php
 namespace Core;
 
+use Core\Validation\Validator;
+
 class Request
 {
     public string $method;
-    public string $uri;
-    public array $query;
+    public array $get;
     public array $post;
-    public array $files;
     public array $server;
+    public array $files;
+    public array $cookies;
+    public array $headers;
 
-    public static function capture(): self
+    private static ?Request $current = null;
+
+    public static function capture(): Request
     {
-        $inst = new self();
-        $inst->method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-        $inst->uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-        $inst->query = $_GET;
-        $inst->post = $_POST;
-        $inst->files = $_FILES;
-        $inst->server = $_SERVER;
-        return $inst;
+        $req = new Request();
+        $req->method  = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $req->get     = $_GET;
+        $req->post    = $_POST;
+        $req->server  = $_SERVER;
+        $req->files   = $_FILES ?? [];
+        $req->cookies = $_COOKIE ?? [];
+        $req->headers = function_exists('getallheaders') ? (getallheaders() ?: []) : [];
+        self::$current = $req;
+        return $req;
     }
 
-    public function path(): string { return $this->uri; }
-    public function host(): string { return $this->server['HTTP_HOST'] ?? ''; }
-    public function scheme(): string { return (!empty($this->server['HTTPS']) && $this->server['HTTPS'] !== 'off') ? 'https' : 'http'; }
-    public function fullUri(): string { return $this->server['REQUEST_URI'] ?? '/'; }
-    public function url(string $path = '/'): string { return $this->scheme() . '://' . $this->host() . $path; }
+    public static function current(): ?Request
+    {
+        return self::$current;
+    }
 
-    public function input(string $key, $default = null) {
-        return $this->post[$key] ?? $this->query[$key] ?? $default;
+    public function path(): string
+    {
+        $uri = $this->server['REQUEST_URI'] ?? '/';
+        $qpos = strpos($uri, '?');
+        if ($qpos !== false) $uri = substr($uri, 0, $qpos);
+        return $uri ?: '/';
+    }
+
+    public function fullUri(): string
+    {
+        return $this->server['REQUEST_URI'] ?? '/';
+    }
+
+    public function scheme(): string
+    {
+        $https = $this->server['HTTPS'] ?? 'off';
+        return ($https !== 'off' && $https !== '') ? 'https' : 'http';
+    }
+
+    public function host(): string
+    {
+        return $this->server['HTTP_HOST'] ?? 'localhost';
+    }
+
+    public function url(string $path = '/'): string
+    {
+        return $this->scheme() . '://' . $this->host() . $path;
+    }
+
+    // --- Helpers ---
+    public function input(?string $key = null, $default = null)
+    {
+        $all = array_merge($this->get, $this->post);
+        if ($key === null) return $all;
+        return $all[$key] ?? $default;
+    }
+
+    public function all(): array
+    {
+        return array_merge($this->get, $this->post);
+    }
+
+    /** @return array{valid:bool, data:array, errors:array} */
+    public function validate(array $rules): array
+    {
+        return Validator::make($this->all(), $rules);
+    }
+
+    public function wantsJson(): bool
+    {
+        $accept = strtolower($this->headers['Accept'] ?? '');
+        $xhr    = strtolower($this->headers['X-Requested-With'] ?? '');
+        $ctype  = strtolower($this->headers['Content-Type'] ?? '');
+        return (
+            str_contains($accept, 'application/json') ||
+            $xhr === 'xmlhttprequest' ||
+            str_contains($ctype, 'application/json')
+        );
+    }
+
+    public function expectsJson(): bool
+    {
+        return $this->wantsJson();
     }
 }

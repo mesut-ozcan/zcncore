@@ -7,5 +7,6 @@
   "routes": ["routes.php"],
   "migrations": [],
   "permissions": ["users.read", "users.write", "users.admin"],
-  "dependencies": []
+  "dependencies": [],
+  "enabled": true
 }
