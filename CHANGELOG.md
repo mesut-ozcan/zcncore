@@ -1,3 +1,11 @@
+## 1.7.1
+- Response: `private ?callable $streamer` → property type kaldırıldı, docblock ile işaretlendi (PHP uyumluluk fix).
+
+## 1.7.0
+- Response helpers: `json()`, `download()`, `stream()`, `noCache()`
+- Exception handler: `Accept: application/json` isteklerinde JSON hata gövdesi (debug modda detaylı)
+- Router: middleware alias desteği (`router->alias('csrf', ...)`; rotalarda `['csrf','auth']` kullanımı)
+
 ## 1.6.1
 - Helpers: `view()` helper geri eklendi (theme > module > app çözümleme). 1.6.0 sonrası undefined function hatası düzeltildi.
 
