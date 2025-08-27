@@ -92,3 +92,11 @@ if (!function_exists('component')) {
         return \Core\View::component($name, $data);
     }
 }
+if (!function_exists('paginate')) {
+    /**
+     * @return array{page:int, per:int, total:int, last:int, offset:int, limit:int, html:string}
+     */
+    function paginate(int $total, int $per, int $page, string $baseUrl, array $query = []): array {
+        return \Core\Support\Paginator::make($total, $per, $page, $baseUrl, $query);
+    }
+}

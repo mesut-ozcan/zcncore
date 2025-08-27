@@ -1,3 +1,8 @@
+## 2.2.0
+- Router: Group içinde route **name prefix** desteği (`group('/admin', ..., ..., 'admin.')`)
+- Validation: **FormRequest** tabanı (rules/authorize/messages; `$request->validated()`)
+- Support: **Paginator** helper (`paginate()`), HTML linkleri ve offset/limit hesapları
+
 ## 2.1.0
 - Router: Route groups & prefix (`router->group('/admin', ['auth','admin'], fn($r)=>...)`)
 - Auth: Mini Gate/Policy (`Core\Auth\Gate`) ile yetenek tanımları (`users.manage`, `account.update` örnekleri)

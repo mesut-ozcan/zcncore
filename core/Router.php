@@ -10,9 +10,10 @@ class Router
     /** @var array<string, array{method:string,pattern:string,handler:mixed,middleware:array,regex:string,paramNames:array}> */
     private array $named = [];
 
-    // Group stack
+    // Group stacks
     private array $prefixStack = [''];
     private array $mwStack = [[]];
+    private array $namePrefixStack = ['']; // <— NEW
 
     public function alias(string $name, callable $mw): void
     {
@@ -24,8 +25,14 @@ class Router
         $this->globalMiddleware[] = $mw;
     }
 
-    /** Grup: prefix + middleware toplu uygula */
-    public function group(string $prefix, array $middleware, callable $callback): void
+    /**
+     * Grup: prefix + middleware + name prefix
+     * @param string $prefix URL prefix (örn: /admin)
+     * @param array $middleware alias/callable dizisi
+     * @param callable $callback fn(Router $r)
+     * @param string $namePrefix route adı ön eki (örn: 'admin.')
+     */
+    public function group(string $prefix, array $middleware, callable $callback, string $namePrefix = ''): void
     {
         $prefix = '/' . ltrim($prefix, '/');
         $newPrefix = rtrim(end($this->prefixStack), '/') . $prefix;
@@ -35,11 +42,13 @@ class Router
         $merged = array_merge(end($this->mwStack), $resolved);
         $this->mwStack[] = $merged;
 
-        // callback’e bu router’ı verelim
+        $this->namePrefixStack[] = end($this->namePrefixStack) . $namePrefix;
+
         $callback($this);
 
         array_pop($this->prefixStack);
         array_pop($this->mwStack);
+        array_pop($this->namePrefixStack);
     }
 
     public function add(string $method, string $pattern, $handler, array $middleware = [], ?string $name = null): void
@@ -49,7 +58,7 @@ class Router
         $pattern = rtrim($prefix, '/') . '/' . ltrim($pattern, '/');
         if ($pattern === '') $pattern = '/';
 
-        // group middleware biriktir + route middleware
+        // group middleware + route middleware
         $mw = array_merge(end($this->mwStack), $this->resolveMiddlewareList($middleware));
 
         [$regex, $paramNames] = $this->toRegex($pattern);
@@ -59,7 +68,11 @@ class Router
             'paramNames'=>$paramNames
         ];
         $this->routes[strtoupper($method)][] = $item;
-        if ($name) $this->named[$name] = $item;
+
+        if ($name) {
+            $fullName = end($this->namePrefixStack) . $name; // <— name prefix uygula
+            $this->named[$fullName] = $item;
+        }
     }
 
     // BC

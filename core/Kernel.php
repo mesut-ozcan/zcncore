@@ -81,6 +81,13 @@ class Kernel
     private function registerBaseBindings(): void
     {
         $this->app->bind('router', $this->router);
+
+        // Policies bootstrap: varsa çalıştır
+        $policies = $this->app->basePath('app/Config/policies.php');
+        if (is_file($policies)) {
+            $fn = require $policies;
+            if (is_callable($fn)) { $fn(); }
+        }
     }
 
     private function registerBaseRoutes(): void
@@ -176,17 +183,5 @@ class Kernel
     {
         $request = Request::capture();
         return $this->router->dispatch($request);
-    }
-
-    private function registerBaseBindings(): void
-    {
-        $this->app->bind('router', $this->router);
-
-        // Policies bootstrap: varsa çalıştır
-        $policies = $this->app->basePath('app/Config/policies.php');
-        if (is_file($policies)) {
-            $fn = require $policies;
-            if (is_callable($fn)) { $fn(); }
-        }
     }    
 }
