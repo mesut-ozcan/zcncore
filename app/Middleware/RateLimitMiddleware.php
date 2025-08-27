@@ -3,43 +3,52 @@ namespace App\Middleware;
 
 use Core\Request;
 use Core\Response;
-use Core\Support\RateLimiter;
 
 class RateLimitMiddleware
 {
+    private int $maxPerMinute;
+    private string $storeDir;
+
+    public function __construct(int $maxPerMinute = 30)
+    {
+        $this->maxPerMinute = $maxPerMinute;
+        $this->storeDir = \base_path('storage/cache/ratelimit');
+        if (!is_dir($this->storeDir)) @mkdir($this->storeDir, 0777, true);
+    }
+
     public function __invoke(Request $req, callable $next)
     {
-        if (strtoupper($req->method) !== 'POST') {
-            return $next($req);
-        }
-
+        $ip   = $req->server['REMOTE_ADDR'] ?? '0.0.0.0';
         $path = $req->path();
-        $cfg  = require base_path('app/Config/ratelimit.php');
+        $uid  = $_SESSION['user']['id'] ?? null;
 
-        $limit = $cfg['default']['limit'];
-        $decay = $cfg['default']['decay'];
+        // Kullanıcı girişi varsa anahtarı user-id bazlı yap, yoksa IP
+        $key = $uid ? "u:$uid:$path" : "ip:$ip:$path";
+        $now = time();
+        $bucket = (int)floor($now / 60); // dakika kovası
+        $file = $this->storeDir . '/' . md5($key) . '.json';
 
-        foreach ($cfg['paths'] as $pattern => $rule) {
-            if (preg_match($pattern, $path)) {
-                $limit = $rule['limit'];
-                $decay = $rule['decay'];
-                break;
+        $data = ['bucket'=>$bucket, 'count'=>0];
+        if (is_file($file)) {
+            $data = json_decode((string)file_get_contents($file), true) ?: $data;
+            if (($data['bucket'] ?? 0) !== $bucket) {
+                $data = ['bucket'=>$bucket, 'count'=>0];
             }
         }
 
-        $ip  = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        $key = $ip . '|' . $req->method . '|' . $path;
+        $data['count']++;
+        @file_put_contents($file, json_encode($data));
 
-        $store = new RateLimiter(base_path('storage/ratelimit'));
-        $state = $store->hit($key, $limit, $decay);
-
-        if ($state['count'] > $limit) {
-            $retry = max(1, $state['reset'] - time());
-            return new Response(
-                "<h1>429 Too Many Requests</h1><p>{$retry} saniye bekleyin.</p>",
-                429,
-                ['Retry-After' => (string)$retry]
-            );
+        if ($data['count'] > $this->maxPerMinute) {
+            // JSON isteyenlere JSON
+            if ($req->wantsJson()) {
+                return Response::json([
+                    'ok'=>false,
+                    'error'=>'Too Many Requests',
+                    'retry_after'=> 60 - ($now % 60)
+                ], 429, ['Retry-After' => (string)(60 - ($now % 60))]);
+            }
+            return new Response('<h1>429 Too Many Requests</h1>', 429, ['Retry-After' => (string)(60 - ($now % 60))]);
         }
 
         return $next($req);

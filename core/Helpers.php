@@ -117,3 +117,15 @@ if (!function_exists('old')) {
 if (!function_exists('errors')) {
     function errors(): array { return \Core\Session::errors(); }
 }
+if (!function_exists('view_cached')) {
+    /**
+     * View’i cache’leyerek render eder.
+     * Örn: echo view_cached('Module::path/name', ['id'=>1], 300);
+     */
+    function view_cached(string $name, array $data = [], ?int $ttl = null): string {
+        $ttl = $ttl ?? (int)\Core\Config::get('cache.views_ttl', 300);
+        return \Core\Support\ViewCache::remember($name, $data, $ttl, function() use ($name, $data){
+            return view($name, $data);
+        });
+    }
+}
