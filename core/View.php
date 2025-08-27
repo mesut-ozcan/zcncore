@@ -1,42 +1,29 @@
 <?php
 namespace Core;
 
-class View
+final class View
 {
-    public static function render(string $view, array $data = []): string
+    /**
+     * Component çözümleme sırası:
+     *  themes/<theme>/components/<name>.php
+     *  app/Views/components/<name>.php
+     */
+    public static function component(string $name, array $data = []): string
     {
-        $paths = self::resolvePaths($view);
-        extract($data, EXTR_SKIP);
-        ob_start();
-        $file = $paths['resolved'];
-        include $file;
-        return ob_get_clean();
-    }
-
-    private static function resolvePaths(string $view): array
-    {
-        $app = Application::get();
-        $theme = Config::get('app.theme', 'default');
-
+        $theme = (string) Config::get('app.theme', 'default');
+        $name  = str_replace(['.', '/'], DIRECTORY_SEPARATOR, $name);
         $candidates = [
-            $app->basePath("themes/$theme/views/$view.php"),
-            $app->basePath("app/Views/$view.php"),
+            base_path("themes/{$theme}/components/{$name}.php"),
+            base_path("app/Views/components/{$name}.php"),
         ];
-
-        // Module view candidate: allow "Module::viewname"
-        if (strpos($view, '::') !== false) {
-            [$module, $name] = explode('::', $view, 2);
-            array_splice($candidates, 1, 0, [
-                $app->basePath("themes/$theme/views/overrides/$module/$name.php"),
-                $app->basePath("modules/$module/Views/$name.php"),
-            ]);
-        }
-
-        foreach ($candidates as $path) {
-            if (is_file($path)) {
-                return ['resolved' => $path];
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                extract($data, EXTR_SKIP);
+                ob_start();
+                include $file;
+                return ob_get_clean();
             }
         }
-        throw new \RuntimeException("View not found: $view");
+        return "<!-- component '{$name}' not found -->";
     }
 }

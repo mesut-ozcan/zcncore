@@ -1,3 +1,9 @@
+## 2.1.0
+- Router: Route groups & prefix (`router->group('/admin', ['auth','admin'], fn($r)=>...)`)
+- Auth: Mini Gate/Policy (`Core\Auth\Gate`) ile yetenek tanımları (`users.manage`, `account.update` örnekleri)
+- View: Component renderer (`component('name', [...])`; bak: themes/default/components / app/Views/components)
+- Controller: `authorizeGate($ability, $args)` eklendi (rol temelli `authorize()` BC korunur)
+
 ## 2.0.0
 - Router: Named routes + URL generator (`route('name', params, absolute=false)`), `getNamed/postNamed/...`
 - Helpers: `route()` helper (Router::urlFor sarmalayıcı)

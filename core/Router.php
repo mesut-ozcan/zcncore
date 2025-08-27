@@ -10,6 +10,10 @@ class Router
     /** @var array<string, array{method:string,pattern:string,handler:mixed,middleware:array,regex:string,paramNames:array}> */
     private array $named = [];
 
+    // Group stack
+    private array $prefixStack = [''];
+    private array $mwStack = [[]];
+
     public function alias(string $name, callable $mw): void
     {
         $this->mwAliases[$name] = $mw;
@@ -20,21 +24,51 @@ class Router
         $this->globalMiddleware[] = $mw;
     }
 
+    /** Grup: prefix + middleware toplu uygula */
+    public function group(string $prefix, array $middleware, callable $callback): void
+    {
+        $prefix = '/' . ltrim($prefix, '/');
+        $newPrefix = rtrim(end($this->prefixStack), '/') . $prefix;
+        $this->prefixStack[] = $newPrefix;
+
+        $resolved = $this->resolveMiddlewareList($middleware);
+        $merged = array_merge(end($this->mwStack), $resolved);
+        $this->mwStack[] = $merged;
+
+        // callback’e bu router’ı verelim
+        $callback($this);
+
+        array_pop($this->prefixStack);
+        array_pop($this->mwStack);
+    }
+
     public function add(string $method, string $pattern, $handler, array $middleware = [], ?string $name = null): void
     {
+        // group prefix uygula
+        $prefix = end($this->prefixStack);
+        $pattern = rtrim($prefix, '/') . '/' . ltrim($pattern, '/');
+        if ($pattern === '') $pattern = '/';
+
+        // group middleware biriktir + route middleware
+        $mw = array_merge(end($this->mwStack), $this->resolveMiddlewareList($middleware));
+
         [$regex, $paramNames] = $this->toRegex($pattern);
-        $item = compact('pattern','regex','handler','middleware') + ['method'=>strtoupper($method), 'paramNames'=>$paramNames];
+        $item = compact('pattern','regex','handler') + [
+            'middleware'=>$mw,
+            'method'=>strtoupper($method),
+            'paramNames'=>$paramNames
+        ];
         $this->routes[strtoupper($method)][] = $item;
         if ($name) $this->named[$name] = $item;
     }
 
-    // BC: eski imzayı koruyoruz
+    // BC
     public function get($p,$h,$m=[]){ $this->add('GET',$p,$h,$m,null); }
     public function post($p,$h,$m=[]){ $this->add('POST',$p,$h,$m,null); }
     public function put($p,$h,$m=[]){ $this->add('PUT',$p,$h,$m,null); }
     public function delete($p,$h,$m=[]){ $this->add('DELETE',$p,$h,$m,null); }
 
-    // Named versiyonlar
+    // Named
     public function getNamed(string $name, string $p, $h, array $m = []): void { $this->add('GET', $p, $h, $m, $name); }
     public function postNamed(string $name, string $p, $h, array $m = []): void { $this->add('POST', $p, $h, $m, $name); }
     public function putNamed(string $name, string $p, $h, array $m = []): void { $this->add('PUT', $p, $h, $m, $name); }
@@ -42,7 +76,6 @@ class Router
 
     private function toRegex(string $pattern): array
     {
-        // {param} -> (?P<param>[^/]+)
         $paramNames = [];
         $regex = preg_replace_callback('#\{([^/]+)\}#', function($m) use (&$paramNames){
             $paramNames[] = $m[1];
@@ -65,7 +98,6 @@ class Router
         return $out;
     }
 
-    /** Named route için URL üretir. */
     public function urlFor(string $name, array $params = [], bool $absolute = false): string
     {
         if (!isset($this->named[$name])) {
@@ -76,16 +108,12 @@ class Router
         foreach ($params as $k=>$v) {
             $url = str_replace('{'.$k.'}', rawurlencode((string)$v), $url);
         }
-        // Eksik param varsa basit güvenlik: temizlemeden önce kontrol
         if (preg_match('#\{[^/]+\}#', $url)) {
             throw new \InvalidArgumentException("Missing parameters for route '$name'");
         }
-
         if ($absolute) {
             $req = Request::current();
-            if ($req) {
-                return $req->scheme().'://'.$req->host().$url;
-            }
+            if ($req) return $req->scheme().'://'.$req->host().$url;
             $base = rtrim(Config::get('app.url',''), '/');
             return $base . $url;
         }
@@ -100,21 +128,20 @@ class Router
         $resolver = function(Request $req) use ($method, $path): Response {
             foreach ($this->routes[$method] ?? [] as $route) {
                 if (preg_match($route['regex'], $path, $m)) {
-                    array_shift($m);
-                    // named captures
+                    // named captures → args
                     $args = [];
                     if (!empty($route['paramNames'])) {
                         foreach ($route['paramNames'] as $pn) {
                             if (isset($m[$pn])) $args[] = $m[$pn];
                         }
                     } else {
-                        // fallback positional
                         foreach ($m as $k=>$v) if (is_int($k)) $args[] = $v;
                     }
 
                     $handler = $route['handler'];
 
-                    $routePipeline = $this->resolveMiddlewareList($route['middleware'] ?? []);
+                    // pipeline
+                    $routePipeline = $route['middleware'] ?? [];
                     $runner = array_reduce(array_reverse($routePipeline), function($next, $mw){
                         return function(Request $req) use ($mw, $next){
                             return $mw($req, $next);

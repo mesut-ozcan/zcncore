@@ -87,3 +87,8 @@ if (!function_exists('route')) {
         return $router->urlFor($name, $params, $absolute);
     }
 }
+if (!function_exists('component')) {
+    function component(string $name, array $data = []): string {
+        return \Core\View::component($name, $data);
+    }
+}

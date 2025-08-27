@@ -35,8 +35,8 @@ $router->postNamed('password.reset.do',    '/password/reset/{token}',   [Passwor
 // Protected
 $router->getNamed('account', '/account', [AccountController::class, 'index'], [new AuthMiddleware()]);
 
-// Admin
-$router->getNamed('admin.dashboard', '/admin', [AdminController::class, 'dashboard'], [
-    new AuthMiddleware(),
-    new AdminOnlyMiddleware()
-]);
+// Admin GROUP (prefix + alias middleware)
+$router->group('/admin', ['auth','admin'], function($r){
+    $r->getNamed('admin.dashboard', '/', [\Modules\Users\Http\Controllers\AdminController::class, 'dashboard']);
+    // ileride: $r->getNamed('admin.users', '/users', [...]);
+});

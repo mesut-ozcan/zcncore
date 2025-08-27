@@ -1,6 +1,8 @@
 <?php
 namespace Core;
 
+use Core\Auth\Gate;
+
 abstract class Controller
 {
     protected function view(string $name, array $data = []): Response
@@ -18,28 +20,26 @@ abstract class Controller
         return Response::redirect($to, $code);
     }
 
-    /**
-     * Basit yetki kontrolü: rol veya callback
-     * @param string|array|callable $ability
-     */
+    /** Rol temelli basit kontrol (BC) */
     protected function authorize($ability): void
     {
         $user = $_SESSION['user'] ?? null;
 
         if (is_callable($ability)) {
-            if (!$ability($user)) {
-                throw new \RuntimeException('Unauthorized', 403);
-            }
+            if (!$ability($user)) throw new \RuntimeException('Unauthorized', 403);
             return;
         }
 
         $roles = (array)$ability;
-        $ok = false;
         foreach ($roles as $r) {
-            if ($user && strtolower(($user['role'] ?? '')) === strtolower($r)) { $ok = true; break; }
+            if ($user && strtolower(($user['role'] ?? '')) === strtolower($r)) return;
         }
-        if (!$ok) {
-            throw new \RuntimeException('Unauthorized', 403);
-        }
+        throw new \RuntimeException('Unauthorized', 403);
+    }
+
+    /** Gate/Policy ile kontrol (önerilen) */
+    protected function authorizeGate(string $ability, array $args = []): void
+    {
+        Gate::authorize($ability, $args);
     }
 }
