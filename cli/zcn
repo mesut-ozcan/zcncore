@@ -20,14 +20,11 @@ function base_path(string $p = ''): string {
 
 // 4) Çekirdek sınıfları yükle (env() çağrılmadan önce Helpers/env hazır olmalı!)
 require_once base_path('core/Env.php');
-
-// env() helper yoksa minimal bir alias tanımla (Helpers'i yüklemeden de çalışsın)
 if (!function_exists('env')) {
     function env(string $key, $default = null) {
         return \Core\Env::get($key, $default);
     }
 }
-
 require_once base_path('core/Helpers.php');
 require_once base_path('core/Config.php');
 require_once base_path('core/Logger.php');
@@ -49,13 +46,12 @@ if (is_file($mgr)) require_once $mgr;
 $qif = base_path('core/Queue/Queue.php');
 if (is_file($qif)) require_once $qif;
 
-// 5) .env ve config yüklenmeden önce Env::load çağrısı
+// 5) .env ve config
 try {
     \Core\Env::load(base_path('.env'));
     \Core\Config::init(base_path('app/Config'), base_path());
 } catch (\Throwable $e) {
     fwrite(STDERR, "[boot] ".$e->getMessage()."\n");
-    // devam et; Application::boot da tekrar deneyebilir
 }
 
 // 6) Uygulamayı boot et
@@ -63,16 +59,36 @@ try {
     \Core\Application::boot(base_path());
 } catch (\Throwable $e) {
     fwrite(STDERR, "[boot] ".$e->getMessage()."\n");
-    exit(1);
+    // install komutu .env yokken de çalışmalı → devam
 }
 
-// 7) Komutlar
+// 7) Yardımcılar
+function line($msg) { echo $msg . PHP_EOL; }
+function write_file(string $path, string $content, bool $overwrite = false): void {
+    $dir = dirname($path);
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    if (is_file($path) && !$overwrite) return;
+    $ok = @file_put_contents($path, $content);
+    if ($ok === false) throw new \RuntimeException("write failed: {$path}");
+}
+function pascal(string $s): string {
+    $s = preg_replace('/[^a-z0-9]+/i',' ', $s);
+    $s = ucwords(strtolower(trim($s)));
+    return str_replace(' ','',$s);
+}
+function slugify(string $s): string {
+    $s = strtolower(trim(preg_replace('/[^a-z0-9]+/i','-', $s), '-'));
+    return $s ?: 'item';
+}
+function app_key(): string {
+    return 'base64:'.base64_encode(random_bytes(32));
+}
+
+// 8) Argümanlar
 $argv = $_SERVER['argv'] ?? [];
 $cmd  = $argv[1] ?? 'help';
 
-// Küçük yardımcılar
-function line($msg) { echo $msg . PHP_EOL; }
-
+// 9) Komutlar
 switch ($cmd) {
     case 'help':
     case '--help':
@@ -80,18 +96,27 @@ switch ($cmd) {
         line("ZCNCore CLI");
         line("Usage: php cli/zcn <command>");
         line("");
-        line("Commands:");
+        line("General:");
         line("  help                 Bu yardımı göster");
         line("  version              Sürümü göster");
         line("  serve                PHP built-in server (dev)");
         line("  config:cache         Config cache oluştur");
         line("  config:clear         Config cache temizle");
+        line("");
+        line("Database:");
         line("  migrate              Tüm migration'ları çalıştır");
         line("  migrate:status       Migration durumunu göster");
         line("  migrate:rollback     Son batch'i geri al");
         line("  make:migration <N>   Boş migration dosyası oluştur");
-        // Queue komutları varsa:
+        line("");
+        line("Installer & Scaffold:");
+        line("  install              İlk kurulum (.env, APP_KEY, storage, migrate)");
+        line("  make:module <Name>   Modül iskeleti oluştur (routes, controller, view)");
+        line("  make:theme <name>    Tema iskeleti oluştur (views + public/assets)");
+        line("  make:controller <Name> [--module=Blog]");
         if (class_exists(\Core\Queue\Queue::class)) {
+            line("");
+            line("Queue:");
             line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
         }
         exit(0);
@@ -103,8 +128,7 @@ switch ($cmd) {
     case 'serve':
         $host = '127.0.0.1';
         $port = 8000;
-        line("Dev server: http://{$host}:{$port}");
-        // Windows'ta path ayırıcıları düzelterek çalıştır
+        line("Dev server: http://{$host}:{ $port }");
         $docroot = base_path('public');
         $cmdline = sprintf('php -S %s:%d -t "%s"', $host, $port, $docroot);
         passthru($cmdline);
@@ -149,10 +173,7 @@ switch ($cmd) {
                 $migrator->rollback();
             } elseif ($cmd === 'make:migration') {
                 $name = $argv[2] ?? null;
-                if (!$name) {
-                    line("Kullanım: php cli/zcn make:migration <Name>");
-                    exit(1);
-                }
+                if (!$name) { line("Kullanım: php cli/zcn make:migration <Name>"); exit(1); }
                 $migrator->make($name);
             }
         } catch (\Throwable $e) {
@@ -161,6 +182,224 @@ switch ($cmd) {
                  ($cmd === 'migrate:rollback' ? "Rollback" : "Make")))." error: ".$e->getMessage());
             exit(1);
         }
+        exit(0);
+
+    case 'install':
+        // storage dizinleri
+        @mkdir(base_path('storage/logs'), 0777, true);
+        @mkdir(base_path('storage/cache'), 0777, true);
+        @mkdir(base_path('storage/sessions'), 0777, true);
+
+        // .env yoksa oluştur
+        $envPath = base_path('.env');
+        if (!is_file($envPath)) {
+            $tmpl = <<<ENV
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://zcncore.local
+APP_KEY=%APP_KEY%
+
+DB_HOST=127.0.0.1
+DB_NAME=zcncore
+DB_USER=root
+DB_PASS=
+DB_CHARSET=utf8mb4
+
+CACHE_DRIVER=file
+LOG_CHANNEL=file
+
+THEME=default
+CANONICAL_HOST=
+TRAILING_SLASH=none
+
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+SESSION_COOKIE=zcn_session
+SESSION_SAMESITE=Lax
+SESSION_SECURE=false
+ENV;
+            $tmpl = str_replace('%APP_KEY%', app_key(), $tmpl);
+            write_file($envPath, $tmpl, false);
+            line(".env oluşturuldu");
+        } else {
+            line(".env mevcut, değiştirilmedi");
+        }
+
+        // Migrate
+        if (class_exists(\Core\Database\Migrator::class)) {
+            try {
+                \Core\Env::load($envPath);
+                \Core\Config::init(base_path('app/Config'), base_path());
+                $pdo = \Core\Database\Connection::getInstance()->pdo();
+                $migrator = new \Core\Database\Migrator($pdo, base_path('database/migrations'));
+                $migrator->migrate();
+                line("Migrations OK");
+            } catch (\Throwable $e) {
+                line("Migration error: ".$e->getMessage());
+            }
+        }
+        line("Kurulum tamam.");
+        exit(0);
+
+    case 'make:module':
+        $name = $argv[2] ?? null;
+        if (!$name) { line("Kullanım: php cli/zcn make:module <Name>"); exit(1); }
+        $Pascal = pascal($name);
+        $slug   = slugify($name);
+        $baseM  = base_path('modules/'.$Pascal);
+
+        // module.json
+        $moduleJson = <<<JSON
+{
+  "name": "{$Pascal}",
+  "slug": "{$slug}",
+  "enabled": true
+}
+JSON;
+        // routes.php
+        $routesPhp = <<<PHP
+<?php
+use Core\Router;
+use Core\Response;
+
+/** @var Router \$this */
+\$this->get('/{$slug}', [\\Modules\\{$Pascal}\\Http\\Controllers\\{$Pascal}HomeController::class, 'index']);
+PHP;
+
+        // Controller
+        $controller = <<<PHP
+<?php
+namespace Modules\\{$Pascal}\\Http\\Controllers;
+
+use Core\\Request;
+use Core\\Response;
+
+class {$Pascal}HomeController
+{
+    public function index(Request \$req): Response
+    {
+        ob_start();
+        include base_path('modules/{$Pascal}/views/index.php');
+        return new Response(ob_get_clean(), 200, ['Content-Type'=>'text/html; charset=UTF-8']);
+    }
+}
+PHP;
+
+        // view
+        $view = <<<PHP
+<?php
+// modules/{$Pascal}/views/index.php
+\$title = '{$Pascal} Module';
+ob_start(); ?>
+<h1>{$Pascal} Module</h1>
+<p>Bu sayfa modules/{$Pascal}/views/index.php dosyasından geliyor.</p>
+<?php \$content = ob_get_clean(); include base_path('themes/default/views/layouts/main.php');
+PHP;
+
+        write_file($baseM.'/module.json', $moduleJson);
+        write_file($baseM.'/routes.php', $routesPhp);
+        write_file($baseM.'/Http/Controllers/'.$Pascal.'HomeController.php', $controller);
+        write_file($baseM.'/views/index.php', $view);
+
+        line("Modül oluşturuldu: modules/{$Pascal}");
+        exit(0);
+
+    case 'make:theme':
+        $name = $argv[2] ?? null;
+        if (!$name) { line("Kullanım: php cli/zcn make:theme <name>"); exit(1); }
+        $slug = slugify($name);
+
+        // views
+        $layout = <<<PHP
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title><?= isset(\$title) ? e(\$title) : 'ZCNCore' ?></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?= \Core\Head::render() ?>
+  <link rel="stylesheet" href="<?= e(mix('/themes/{$slug}/assets/css/app.css')) ?>">
+</head>
+<body>
+  <header class="container">
+    <a href="/" class="brand"><?= e(config('app.name','ZCNCore')) ?></a>
+    <nav><a href="/">Home</a></nav>
+  </header>
+  <main class="container">
+    <?= \$content ?? '' ?>
+  </main>
+  <footer class="container small muted">
+    <hr>
+    <p><?= e(config('app.name','ZCNCore')) ?> • v<?= e(app()->version()) ?></p>
+  </footer>
+  <script src="<?= e(mix('/themes/{$slug}/assets/js/app.js')) ?>"></script>
+</body>
+</html>
+PHP;
+
+        $home = <<<PHP
+<?php
+// themes/{$slug}/views/home.php
+\$title = 'Welcome - {$slug}';
+ob_start(); ?>
+<h1>Yeni Tema: {$slug}</h1>
+<p>Bu sayfa themes/{$slug}/views/home.php dosyasından geliyor.</p>
+<?php \$content = ob_get_clean(); include base_path('themes/{$slug}/views/layouts/main.php');
+PHP;
+
+        write_file(base_path('themes/'.$slug.'/views/layouts/main.php'), $layout);
+        write_file(base_path('themes/'.$slug.'/views/home.php'), $home);
+
+        // public assets
+        $css = "/* {$slug} theme */\n.container{max-width:960px;margin:0 auto;padding:1rem}\n";
+        $js  = "console.log('{$slug} theme loaded');\n";
+        write_file(base_path('public/themes/'.$slug.'/assets/css/app.css'), $css);
+        write_file(base_path('public/themes/'.$slug.'/assets/js/app.js'),  $js);
+
+        line("Tema oluşturuldu: themes/{$slug} (views) + public/themes/{$slug}/assets (css/js)");
+        exit(0);
+
+    case 'make:controller':
+        $name = $argv[2] ?? null;
+        if (!$name) { line("Kullanım: php cli/zcn make:controller <Name> [--module=Blog]"); exit(1); }
+        $Pascal = preg_match('/Controller$/',$name) ? $name : $name.'Controller';
+
+        // module param
+        $module = null;
+        foreach ($argv as $a) {
+            if (str_starts_with($a, '--module=')) {
+                $module = substr($a, 9);
+                break;
+            }
+        }
+
+        if ($module) {
+            $M = pascal($module);
+            $ns = "Modules\\\\{$M}\\\\Http\\\\Controllers";
+            $path = base_path('modules/'.$M.'/Http/Controllers/'.$Pascal.'.php');
+        } else {
+            $ns = "App\\\\Http\\\\Controllers";
+            $path = base_path('app/Http/Controllers/'.$Pascal.'.php');
+        }
+
+        $tpl = <<<PHP
+<?php
+namespace {$ns};
+
+use Core\\Request;
+use Core\\Response;
+
+class {$Pascal}
+{
+    public function index(Request \$req): Response
+    {
+        return new Response('<h1>{$Pascal}::index</h1>', 200, ['Content-Type'=>'text/html; charset=UTF-8']);
+    }
+}
+PHP;
+
+        write_file($path, $tpl);
+        line("Controller oluşturuldu: {$path}");
         exit(0);
 
     case 'queue:work':

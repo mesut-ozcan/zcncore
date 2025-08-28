@@ -1,8 +1,20 @@
-## 2.9.0
-- Session: file + database driver desteği (config ile seçilebilir), sliding expiration
-- RateLimiter v2: config tabanlı rota/metod başına limitler, bilgilendirici header’lar
-- CSRF: `/csrf/refresh` ucu + küçük JS helper ile token yenileme
-- Güvenlik: önerilen temel güvenlik header’ları
+## 3.0.0
+- CLI Installer: `php cli/zcn install` (.env oluşturur, APP_KEY üretir, storage dizinlerini hazırlar, migrate çalıştırır)
+- Scaffold komutları:
+  - `make:module <Name>` (routes, controller, view, module.json)
+  - `make:theme <name>` (views + public/assets iskeleti)
+  - `make:controller <Name> [--module=Blog]` (app/ veya modules/<Modül>/ içine)
+- Küçük iyileştirmeler: Windows/WAMP uyumlu yol yazımı, güvenli dosya oluşturma
+
+## v2.9.0
+- Session: file + database driver (sliding expiration)
+- RateLimiter v2: config tabanlı route/method limitleri
+- CSRF: /csrf/refresh ucu + JS helper ile token yenileme
+- Error pages: 404 / 500
+- Request logging middleware
+- Assets: tema asset’leri public/ altına taşındı (performans ve doğru servis için)
+- mix() helper: manifest (Vite/Laravel Mix) → fingerprint’li yollar; yoksa asset() fallback
+- CLI: config:cache / config:clear; migrate/tags iyileştirmeleri
 
 ## 2.8.0
 - Error pages: `themes/default/views/errors/404.php`, `500.php` (HTML + JSON fallback)
