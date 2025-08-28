@@ -1,7 +1,7 @@
 ## 3.2.0
-- Admin panel (MVP): Dashboard (version/uptime), Log viewer (tail + download), Cache clear
-- Admin middleware ile koruma
-- Tema menüsüne Admin bağlantıları (rol bazlı)
+- Admin panel (MVP): Dashboard (version/uptime/php/cache), Log viewer (tail + download), Cache clear (POST, CSRF)
+- Rotalar admin middleware ile korundu
+- Tema menüsüne Admin bağlantıları
 
 ## 3.1.0
 - PHPUnit smoke testleri (Router/Response/Helpers)
