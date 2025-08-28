@@ -123,6 +123,7 @@ switch ($cmd) {
             line("Queue:");
             line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
             line("  queue:push-demo <e>  Örnek WelcomeMailJob push et");
+            line("  make:job <Name>      Job iskeleti oluştur (App\\Jobs)");
         }
         exit(0);
 
@@ -419,6 +420,34 @@ PHP;
 
         write_file($path, $tpl);
         line("Controller oluşturuldu: {$path}");
+        exit(0);
+
+    case 'make:job':
+        $name = $argv[2] ?? null;
+        if (!$name) { line("Kullanım: php cli/zcn make:job <Name>"); exit(1); }
+        if (!preg_match('/Job$/', $name)) $name .= 'Job';
+        $Pascal = preg_replace('/[^A-Za-z0-9]/', '', $name);
+        $path = base_path('app/Jobs/'.$Pascal.'.php');
+        $tpl = <<<PHP
+<?php
+namespace App\\Jobs;
+
+final class {$Pascal}
+{
+    /**
+     * @param array \$data
+     * @return bool true=success, false=retry/fail
+     */
+    public function handle(array \$data): bool
+    {
+        // TODO: işi buraya yaz
+        // ör: sleep(1);
+        return true;
+    }
+}
+PHP;
+        write_file($path, $tpl);
+        line("Job oluşturuldu: app/Jobs/{$Pascal}.php");
         exit(0);
 
     case 'queue:work':

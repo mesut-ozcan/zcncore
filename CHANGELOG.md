@@ -1,3 +1,8 @@
+## 3.3.1
+- Admin: Failed Jobs ekranı (liste/Retry/Delete)
+- Queue: failedJobs(), retryFailed(), deleteFailed() yardımcıları
+- CLI: make:job komutu
+
 ## 3.2.1
 - Admin arayüzü iyileştirmeleri: kartlar, butonlar, log görünümü ve satır filtresi
 - Tema CSS: kart, buton, tablo, log ve alert stilleri
