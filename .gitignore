@@ -25,3 +25,4 @@ node_modules/
 
 # Sistem dosyaları
 .DS_Store
+".phpunit.result.cache" 
