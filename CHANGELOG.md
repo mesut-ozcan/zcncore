@@ -1,3 +1,8 @@
+## 3.1.0
+- PHPUnit smoke testleri (Router/Response/Helpers)
+- GitHub Actions CI (PHP 8.2/8.3)
+- Dev-only composer (phpunit)
+
 ## 3.0.0
 - CLI Installer: `php cli/zcn install` (.env oluşturur, APP_KEY üretir, storage dizinlerini hazırlar, migrate çalıştırır)
 - Scaffold komutları:
