@@ -10,7 +10,6 @@ final class JobsController
     public function failed(Request $req): Response
     {
         $jobs = Queue::failedJobs();
-        // en eskiden en yeniye veya tam tersi, zevkine göre:
         usort($jobs, fn($a,$b)=>($b['createdAt'] <=> $a['createdAt']));
 
         ob_start();
@@ -21,9 +20,8 @@ final class JobsController
 
     public function retry(Request $req): Response
     {
-        $httpMethod = method_exists($req, 'method')
-            ? $req->method()
-            : strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
+        // Intelephense P1013 kaçınmak için method() çağırma:
+        $httpMethod = strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
 
         if ($httpMethod !== 'POST' || !\Core\Csrf::check($req->input['_token'] ?? '')) {
             return Response::redirect('/admin/jobs/failed');
@@ -46,9 +44,8 @@ final class JobsController
 
     public function delete(Request $req): Response
     {
-        $httpMethod = method_exists($req, 'method')
-            ? $req->method()
-            : strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
+        // Intelephense P1013 kaçınmak için method() çağırma:
+        $httpMethod = strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
 
         if ($httpMethod !== 'POST' || !\Core\Csrf::check($req->input['_token'] ?? '')) {
             return Response::redirect('/admin/jobs/failed');
