@@ -1,3 +1,8 @@
+## 3.2.0
+- Admin panel (MVP): Dashboard (version/uptime), Log viewer (tail + download), Cache clear
+- Admin middleware ile koruma
+- Tema menüsüne Admin bağlantıları (rol bazlı)
+
 ## 3.1.0
 - PHPUnit smoke testleri (Router/Response/Helpers)
 - GitHub Actions CI (PHP 8.2/8.3)
