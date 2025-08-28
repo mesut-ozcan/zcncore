@@ -158,3 +158,52 @@ if (!function_exists('asset')) {
         return $url;
     }
 }
+if (!function_exists('mix')) {
+    /**
+     * mix('/themes/default/assets/css/app.css')
+     * - Önce public/mix-manifest.json
+     * - Sonra public/build/manifest.json (Vite)
+     * - Bulamazsa asset() ile fallback
+     * @param string $path Web yolu ("/" ile başlamalı veya göreli verilir, başına "/" eklenir)
+     * @param bool   $absolute Tam URL döndür (app.url ile)
+     */
+    function mix(string $path, bool $absolute = false): string
+    {
+        $web = $path[0] === '/' ? $path : '/'.$path;
+
+        // 1) Laravel Mix (public/mix-manifest.json)
+        $mixFile = base_path('public/mix-manifest.json');
+        if (is_file($mixFile)) {
+            $json = json_decode((string)file_get_contents($mixFile), true) ?: [];
+            if (isset($json[$web])) {
+                $out = '/'.ltrim((string)$json[$web], '/');
+                if ($absolute) {
+                    $base = rtrim((string)\Core\Config::get('app.url',''), '/');
+                    if ($base) $out = $base . $out;
+                }
+                return $out;
+            }
+        }
+
+        // 2) Vite (public/build/manifest.json)
+        $viteFile = base_path('public/build/manifest.json');
+        if (is_file($viteFile)) {
+            $json = json_decode((string)file_get_contents($viteFile), true) ?: [];
+
+            // Vite manifest key'i kaynak dosya (örn 'themes/default/assets/js/app.js')
+            // Biz $web ile eşleştirmeye çalışalım: baştaki /’yi atıp lookup
+            $key = ltrim($web, '/');
+            if (isset($json[$key]['file'])) {
+                $out = '/build/'.ltrim((string)$json[$key]['file'], '/');
+                if ($absolute) {
+                    $base = rtrim((string)\Core\Config::get('app.url',''), '/');
+                    if ($base) $out = $base . $out;
+                }
+                return $out;
+            }
+        }
+
+        // 3) Fallback: asset()
+        return asset($web, $absolute);
+    }
+}

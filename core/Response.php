@@ -149,6 +149,26 @@ class Response
         return $this;
     }
 
+    /** Header ekle/override (zincirleme) */
+    public function withHeader(string $key, string $value): self
+    {
+        $this->headers[$key] = $value;
+        return $this;
+    }
+
+    /** Status kodu değiştir (zincirleme) */
+    public function withStatus(int $status): self
+    {
+        $this->status = $status;
+        return $this;
+    }
+
+    /** Kernel / middleware kontrolleri için */
+    public function getStatusCode(): int
+    {
+        return $this->status;
+    }
+
     public function send(): void
     {
         http_response_code($this->status);

@@ -1,3 +1,22 @@
+## 2.8.0
+- Error pages: `themes/default/views/errors/404.php`, `500.php` (HTML + JSON fallback)
+- Middleware: `RequestLogger` her isteği loglar (ip, method, path, duration, status)
+
+## 2.7.0
+- Logger: Günlük dosyaları günlük bazında (`app-{Y-m-d}.log`), otomatik eski log temizliği (`retention_days`)
+- Status: Sağlık kontrolü (DB/Cache/Mail/Queue/Env) — `/status` HTML & JSON
+- Assets: `asset()` helper ile fingerprint (`?v=mtime`) ve absolute URL desteği
+
+## 2.6.0
+- Mail: `mail_send()` helper (driver: `mail` veya basit `smtp` AUTH LOGIN + TLS/SSL)
+- Queue: `Queue::dispatch()` (sync|file), `queue:work` worker ile dosya tabanlı kuyruğu tüket
+- CLI: `config:cache`, `config:clear` komutları (Config dosyası önbelleği)
+
+## 2.5.0
+- Auth: Güvenli **remember me** (imzalı + şifreli cookie), `Core\Auth\Remember::issue/forget/userIdFromCookie`
+- RateLimit: IP + kullanıcı ID bazlı anahtar; 429 JSON/HTML yanıtları
+- View Cache: `view_cached()` helper; `storage/cache/views` altında HTML cache
+
 ## 2.4.0
 - Session: Flash & Old Input altyapısı (`flash()`, `old()`, `errors()`), `Session::boot()`
 - Router: FormRequest başarısızlığında HTML istekleri için **geri yönlendirme** + old & errors flash; JSON istekleri için 422 JSON

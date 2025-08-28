@@ -28,6 +28,11 @@ class Kernel
             $this->router->alias('admin', new \Modules\Users\Middleware\AdminOnlyMiddleware());
         }
 
+        // RequestLogger middleware (instance veriyoruz)
+        if (class_exists(\App\Middleware\RequestLogger::class)) {
+            $this->router->middleware(new \App\Middleware\RequestLogger());
+        }
+
         $this->registerBaseRoutes();
         $this->loadModules();
 
@@ -67,13 +72,23 @@ class Kernel
                     'code' => $e->getCode(),
                     'type' => (new \ReflectionClass($e))->getShortName(),
                 ];
-                (new Response(json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|($debug?JSON_PRETTY_PRINT:0)),
-                    500, ['Content-Type' => 'application/json; charset=UTF-8']))->send();
+                (new Response(
+                    json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|($debug?JSON_PRETTY_PRINT:0)),
+                    500,
+                    ['Content-Type' => 'application/json; charset=UTF-8']
+                ))->send();
             } else {
-                $body = $debug
-                    ? "<h1>Exception</h1><pre>{$e}</pre>"
-                    : "<h1>Server Error</h1><p>Something went wrong.</p>";
-                (new Response($body, 500))->send();
+                $file = app()->basePath('themes/default/views/errors/500.php');
+                if (!$debug && is_file($file)) {
+                    ob_start();
+                    include $file;
+                    (new Response(ob_get_clean(), 500))->send();
+                } else {
+                    $body = $debug
+                        ? "<h1>Exception</h1><pre>{$e}</pre>"
+                        : "<h1>Server Error</h1><p>Something went wrong.</p>";
+                    (new Response($body, 500))->send();
+                }
             }
             exit;
         });
@@ -106,7 +121,7 @@ class Kernel
             return (new Response($txt, 200, ['Content-Type' => 'text/plain']));
         });
 
-        // Status endpoint (debug)
+        // Status endpoint
         $this->router->getNamed('status', '/status', [\App\Http\Controllers\StatusController::class, 'index']);
 
         // Canonical host / trailing slash / CSRF cookie
@@ -183,6 +198,21 @@ class Kernel
     public function handle(): Response
     {
         $request = Request::capture();
-        return $this->router->dispatch($request);
-    }    
+        $response = $this->router->dispatch($request);
+
+        // 404 error page (HTML/JSON)
+        if ($response->getStatusCode() === 404) {
+            if ($request->wantsJson()) {
+                return Response::json(['ok'=>false,'error'=>'Not Found'], 404);
+            }
+            $file = $this->app->basePath('themes/default/views/errors/404.php');
+            if (is_file($file)) {
+                ob_start();
+                include $file;
+                return new Response(ob_get_clean(), 404);
+            }
+        }
+
+        return $response;
+    }
 }
