@@ -1,3 +1,8 @@
+## 3.2.1
+- Admin arayüzü iyileştirmeleri: kartlar, butonlar, log görünümü ve satır filtresi
+- Tema CSS: kart, buton, tablo, log ve alert stilleri
+- Küçük UX dokunuşları (flash auto-hide)
+
 ## 3.2.0
 - Admin panel (MVP): Dashboard (version/uptime/php/cache), Log viewer (tail + download), Cache clear (POST, CSRF)
 - Rotalar admin middleware ile korundu
