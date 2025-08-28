@@ -1,236 +1,178 @@
-#!/usr/bin/env php
 <?php
-/**
- * ZCNCore CLI
- * Usage:
- *   php cli/zcn <command> [args]
- */
+// zcncore CLI (Windows/WAMP uyumlu)
 
-/* ---------- Proje kökü ---------- */
-$__base = realpath(__DIR__ . '/..');
-if ($__base === false) {
-    $__base = dirname(__DIR__);
-}
-define('ZCN_BASE', $__base);
+// 1) Hataları görünür yap
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
 
-/* ---------- Autoload ---------- */
-spl_autoload_register(function ($class) {
-    $map = [
-        'Core\\'    => ZCN_BASE . '/core/',
-        'App\\'     => ZCN_BASE . '/app/',
-        'Modules\\' => ZCN_BASE . '/modules/',
-    ];
-    foreach ($map as $prefix => $dir) {
-        if (strncmp($class, $prefix, strlen($prefix)) === 0) {
-            $rel  = substr($class, strlen($prefix));
-            $file = $dir . str_replace('\\', '/', $rel) . '.php';
-            if (is_file($file)) { require $file; return; }
-        }
-    }
-});
+// 2) Proje kökünü çöz
+$base = realpath(__DIR__ . '/..');
+if ($base === false) {
+    fwrite(STDERR, "[boot] Base path resolve failed\n");
+    exit(1);
+}
+define('ZCN_BASE', $base);
 
-/* ---------- Yardımcılar ---------- */
-function cli_out(string $msg, int $exit = null) {
-    fwrite(STDOUT, $msg);
-    if ($exit !== null) exit($exit);
-}
-function cli_err(string $msg, int $exit = 1) {
-    fwrite(STDERR, $msg);
-    exit($exit);
-}
+// 3) Yardımcı base_path()
 function base_path(string $p = ''): string {
-    // Windows/Unix uyumlu birleştirme
-    $left = rtrim(ZCN_BASE, "/\\");
-    $right = ltrim($p, "/\\");
-    return $right === '' ? $left : $left . DIRECTORY_SEPARATOR . $right;
+    return rtrim(ZCN_BASE, "/\\") . ($p ? DIRECTORY_SEPARATOR . ltrim($p, "/\\") : '');
 }
 
-/* ---------- Bootstrap: Env + Config ---------- */
+// 4) Çekirdek sınıfları yükle (env() çağrılmadan önce Helpers/env hazır olmalı!)
+require_once base_path('core/Env.php');
+
+// env() helper yoksa minimal bir alias tanımla (Helpers'i yüklemeden de çalışsın)
+if (!function_exists('env')) {
+    function env(string $key, $default = null) {
+        return \Core\Env::get($key, $default);
+    }
+}
+
+require_once base_path('core/Helpers.php');
+require_once base_path('core/Config.php');
+require_once base_path('core/Logger.php');
+require_once base_path('core/Cache.php');
+require_once base_path('core/Events.php');
+require_once base_path('core/Head.php');
+require_once base_path('core/Application.php');
+require_once base_path('core/Request.php');
+require_once base_path('core/Response.php');
+require_once base_path('core/Router.php');
+
+// DB & Migrator (varsa)
+$dbc = base_path('core/Database/Connection.php');
+if (is_file($dbc)) require_once $dbc;
+$mgr = base_path('core/Database/Migrator.php');
+if (is_file($mgr)) require_once $mgr;
+
+// Queue (varsa)
+$qif = base_path('core/Queue/Queue.php');
+if (is_file($qif)) require_once $qif;
+
+// 5) .env ve config yüklenmeden önce Env::load çağrısı
 try {
-    if (class_exists(\Core\Env::class)) {
-        \Core\Env::load(base_path('.env'));
-    }
-    if (class_exists(\Core\Config::class)) {
-        \Core\Config::init(base_path('app/Config'), ZCN_BASE);
-    }
-    // NOT: Application örneği OLUŞTURMUYORUZ (ctor private olabilir)
+    \Core\Env::load(base_path('.env'));
+    \Core\Config::init(base_path('app/Config'), base_path());
 } catch (\Throwable $e) {
-    cli_err("[boot] ".$e->getMessage().PHP_EOL);
+    fwrite(STDERR, "[boot] ".$e->getMessage()."\n");
+    // devam et; Application::boot da tekrar deneyebilir
 }
 
-/* ---------- Argümanlar ---------- */
+// 6) Uygulamayı boot et
+try {
+    \Core\Application::boot(base_path());
+} catch (\Throwable $e) {
+    fwrite(STDERR, "[boot] ".$e->getMessage()."\n");
+    exit(1);
+}
+
+// 7) Komutlar
 $argv = $_SERVER['argv'] ?? [];
 $cmd  = $argv[1] ?? 'help';
-$arg1 = $argv[2] ?? null;
-$arg2 = $argv[3] ?? null;
 
-/* ---------- Komutlar ---------- */
+// Küçük yardımcılar
+function line($msg) { echo $msg . PHP_EOL; }
+
 switch ($cmd) {
     case 'help':
-    case '-h':
     case '--help':
-        cli_out(<<<TXT
-ZCNCore CLI
-
-Kullanım:
-  php cli/zcn <komut> [argümanlar]
-
-Genel:
-  help                         Bu yardım
-  version                      Çekirdek sürümü (bilgi amaçlı)
-
-Geliştirme:
-  serve [host:port]            Built-in dev server (public/ docroot)
-
-Config:
-  config:cache                 Config dosyalarını cache'e yazar
-  config:clear                 Config cache temizler
-
-Veritabanı (Migrations):
-  migrate                      Tüm bekleyen migration'ları uygular
-  migrate:status               Migration durumunu listeler
-  migrate:rollback             Son batch'i geri alır
-  make:migration <Name>        Yeni migration iskeleti oluşturur
-
-Queue:
-  queue:work [max] [sleep]     File driver kuyruğunu tüket (max iş / uyku sn)
-
-TXT
-        , 0);
-        break;
+    case '-h':
+        line("ZCNCore CLI");
+        line("Usage: php cli/zcn <command>");
+        line("");
+        line("Commands:");
+        line("  help                 Bu yardımı göster");
+        line("  version              Sürümü göster");
+        line("  serve                PHP built-in server (dev)");
+        line("  config:cache         Config cache oluştur");
+        line("  config:clear         Config cache temizle");
+        line("  migrate              Tüm migration'ları çalıştır");
+        line("  migrate:status       Migration durumunu göster");
+        line("  migrate:rollback     Son batch'i geri al");
+        line("  make:migration <N>   Boş migration dosyası oluştur");
+        // Queue komutları varsa:
+        if (class_exists(\Core\Queue\Queue::class)) {
+            line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
+        }
+        exit(0);
 
     case 'version':
-        // Application private ctor olabilir; güvenli yol: Config veya fallback
-        $v = \Core\Config::get('app.version');
-        if (!$v && class_exists(\Core\Application::class)) {
-            // Erişilebilir bir sabit/yöntem yoksa "unknown" göster.
-            $v = 'unknown';
-        }
-        cli_out("ZCNCore version: ".($v ?: 'unknown')."\n", 0);
-        break;
+        line("ZCNCore " . \Core\Application::get()->version());
+        exit(0);
 
-    /* ---------- DEV SERVER ---------- */
     case 'serve':
-        $host = $arg1 ?: '127.0.0.1:8000';
-        if (!preg_match('/^\d{1,3}(\.\d{1,3}){3}:\d{2,5}$/', $host)) {
-            $host = '127.0.0.1:8000';
-        }
+        $host = '127.0.0.1';
+        $port = 8000;
+        line("Dev server: http://{$host}:{$port}");
+        // Windows'ta path ayırıcıları düzelterek çalıştır
         $docroot = base_path('public');
-        cli_out("Dev server: http://{$host}\nDocroot: {$docroot}\nCtrl+C ile durdur.\n");
-        $cmdline = 'php -S ' . $host . ' -t ' . escapeshellarg($docroot);
-        passthru($cmdline, $code);
-        exit($code);
+        $cmdline = sprintf('php -S %s:%d -t "%s"', $host, $port, $docroot);
+        passthru($cmdline);
+        exit(0);
 
-    /* ---------- CONFIG CACHE ---------- */
     case 'config:cache':
         try {
-            \Core\Config::cache();
-            cli_out("Config cached.\n", 0);
+            \Core\Config::cacheWrite();
+            line("Config cache yazıldı.");
         } catch (\Throwable $e) {
-            cli_err("Config cache error: ".$e->getMessage()."\n");
+            line("config:cache error: ".$e->getMessage());
+            exit(1);
         }
-        break;
+        exit(0);
 
     case 'config:clear':
         try {
-            \Core\Config::clearCache();
-            cli_out("Config cache cleared.\n", 0);
+            \Core\Config::cacheClear();
+            line("Config cache temizlendi.");
         } catch (\Throwable $e) {
-            cli_err("Config clear error: ".$e->getMessage()."\n");
+            line("config:clear error: ".$e->getMessage());
+            exit(1);
         }
-        break;
+        exit(0);
 
-    /* ---------- MIGRATIONS ---------- */
     case 'migrate':
-        try {
-            if (class_exists(\Core\Database\Migrator::class)) {
-                \Core\Database\Migrator::migrate();
-                cli_out("Migration complete.\n", 0);
-            } else {
-                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
-            }
-        } catch (\Throwable $e) {
-            cli_err("Migrate error: ".$e->getMessage()."\n");
-        }
-        break;
-
     case 'migrate:status':
-        try {
-            if (class_exists(\Core\Database\Migrator::class)) {
-                \Core\Database\Migrator::status();
-                exit(0);
-            } else {
-                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
-            }
-        } catch (\Throwable $e) {
-            cli_err("Status error: ".$e->getMessage()."\n");
-        }
-        break;
-
     case 'migrate:rollback':
-        try {
-            if (class_exists(\Core\Database\Migrator::class)) {
-                \Core\Database\Migrator::rollback();
-                cli_out("Rollback complete.\n", 0);
-            } else {
-                cli_err("Migrator bulunamadı: Core\\Database\\Migrator\n");
-            }
-        } catch (\Throwable $e) {
-            cli_err("Rollback error: ".$e->getMessage()."\n");
-        }
-        break;
-
     case 'make:migration':
-        $name = $arg1 ?: null;
-        if (!$name) cli_err("Kullanım: php cli/zcn make:migration <Name>\n");
+        if (!class_exists(\Core\Database\Migrator::class)) {
+            line("Migrator yok: core/Database/Migrator.php bulunamadı.");
+            exit(1);
+        }
+        $pdo = \Core\Database\Connection::getInstance()->pdo();
+        $migrator = new \Core\Database\Migrator($pdo, base_path('database/migrations'));
         try {
-            if (class_exists(\Core\Database\Migrator::class)) {
-                \Core\Database\Migrator::make($name);
-                cli_out("Created migration: {$name}\n", 0);
-            } else {
-                // Basit fallback: dosya oluştur
-                $ts = date('Ymd_His');
-                $dir = base_path('database/migrations');
-                if (!is_dir($dir)) @mkdir($dir, 0777, true);
-                $file = $dir . '/' . $ts . '_' . preg_replace('/\W+/', '_', $name) . '.php';
-                $tpl = <<<PHP
-<?php
-return new class {
-    public function up(\\PDO \$db): void
-    {
-        // TODO: up
-    }
-    public function down(\\PDO \$db): void
-    {
-        // TODO: down
-    }
-};
-PHP;
-                file_put_contents($file, $tpl);
-                cli_out("Created migration (fallback): {$file}\n", 0);
+            if ($cmd === 'migrate') {
+                $migrator->migrate();
+            } elseif ($cmd === 'migrate:status') {
+                $migrator->status();
+            } elseif ($cmd === 'migrate:rollback') {
+                $migrator->rollback();
+            } elseif ($cmd === 'make:migration') {
+                $name = $argv[2] ?? null;
+                if (!$name) {
+                    line("Kullanım: php cli/zcn make:migration <Name>");
+                    exit(1);
+                }
+                $migrator->make($name);
             }
         } catch (\Throwable $e) {
-            cli_err("Make migration error: ".$e->getMessage()."\n");
+            line(($cmd === 'migrate' ? "Migrate" :
+                 ($cmd === 'migrate:status' ? "Status" :
+                 ($cmd === 'migrate:rollback' ? "Rollback" : "Make")))." error: ".$e->getMessage());
+            exit(1);
         }
-        break;
+        exit(0);
 
-    /* ---------- QUEUE WORKER ---------- */
     case 'queue:work':
-        $max   = (int)($arg1 ?? 0);
-        $sleep = (int)($arg2 ?? 2);
-        try {
-            if (!class_exists(\Core\Queue\Queue::class)) {
-                cli_err("Queue modülü bulunamadı: Core\\Queue\\Queue\n");
-            }
-            cli_out("Queue worker started (max={$max}, sleep={$sleep}s)\n");
-            \Core\Queue\Queue::work($max, $sleep);
-            cli_out("Queue worker finished.\n", 0);
-        } catch (\Throwable $e) {
-            cli_err("Queue error: ".$e->getMessage()."\n");
+        if (!class_exists(\Core\Queue\Queue::class)) {
+            line("Queue modülü yok.");
+            exit(1);
         }
-        break;
+        \Core\Queue\Queue::work();
+        exit(0);
 
-    /* ---------- BİLİNMEYEN ---------- */
     default:
-        cli_err("Bilinmeyen komut: {$cmd}\n'php cli/zcn help' ile komutları görebilirsin.\n");
+        line("Bilinmeyen komut: {$cmd}");
+        line("Yardım için: php cli/zcn help");
+        exit(1);
 }

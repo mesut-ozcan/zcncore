@@ -124,8 +124,18 @@ class Kernel
         // Status endpoint
         $this->router->getNamed('status', '/status', [\App\Http\Controllers\StatusController::class, 'index']);
 
+        // CSRF token yenileme ucu (JS helper zcn.refreshCsrf() bunu çağırır)
+        $this->router->post('/csrf/refresh', [\App\Http\Controllers\CsrfController::class, 'refresh']);
+        // NOT: Eğer Router post() dönüşünde alias chain destekli değilse ->alias() yazmayın.
+
         // Canonical host / trailing slash / CSRF cookie
-        $this->router->middleware(function (Request $req, callable $next) {
+        $this->router->middleware(
+        /**
+         * @param \Core\Request $req
+         * @param callable(\Core\Request):\Core\Response $next
+         * @return \Core\Response
+         */
+        function (Request $req, callable $next): Response {
             Csrf::ensureCookie();
 
             $hostCanonical = Config::get('app.canonical_host', '');
@@ -135,7 +145,7 @@ class Kernel
             $host = $req->host();
 
             if ($redir = RedirectRegistry::check($req)) {
-                return $redir;
+                return $redir; // Response
             }
 
             if ($hostCanonical && $host !== $hostCanonical) {

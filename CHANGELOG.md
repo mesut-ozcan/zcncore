@@ -1,3 +1,9 @@
+## 2.9.0
+- Session: file + database driver desteği (config ile seçilebilir), sliding expiration
+- RateLimiter v2: config tabanlı rota/metod başına limitler, bilgilendirici header’lar
+- CSRF: `/csrf/refresh` ucu + küçük JS helper ile token yenileme
+- Güvenlik: önerilen temel güvenlik header’ları
+
 ## 2.8.0
 - Error pages: `themes/default/views/errors/404.php`, `500.php` (HTML + JSON fallback)
 - Middleware: `RequestLogger` her isteği loglar (ip, method, path, duration, status)

@@ -207,3 +207,11 @@ if (!function_exists('mix')) {
         return asset($web, $absolute);
     }
 }
+if (!function_exists('env')) {
+    /**
+     * .env değerini döndürür (Core\Env üzerinden)
+     */
+    function env(string $key, $default = null) {
+        return \Core\Env::get($key, $default);
+    }
+}
