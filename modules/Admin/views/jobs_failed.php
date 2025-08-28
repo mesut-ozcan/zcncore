@@ -1,5 +1,4 @@
 <?php
-/** @var array{jobs: array<int,array{id:string,class:string,attempts:int,max:int,createdAt:int}>} $data */
 $title = 'Admin • Failed Jobs';
 ob_start();
 ?>
@@ -17,7 +16,7 @@ ob_start();
         <th>Sınıf</th>
         <th>Attempts</th>
         <th>Oluşturma</th>
-        <th style="width:220px">İşlem</th>
+        <th style="width:280px">İşlem</th>
       </tr>
     </thead>
     <tbody>
@@ -28,6 +27,7 @@ ob_start();
         <td><?= e($j['attempts']) ?> / <?= e($j['max']) ?></td>
         <td class="small"><?= $j['createdAt'] ? date('Y-m-d H:i:s', $j['createdAt']) : '-' ?></td>
         <td>
+          <a class="btn outline" href="/admin/jobs/failed/detail?id=<?= urlencode($j['id']) ?>">Detay</a>
           <form method="post" action="/admin/jobs/failed/retry" style="display:inline">
             <?= csrf_field() ?>
             <input type="hidden" name="id" value="<?= e($j['id']) ?>">
@@ -36,7 +36,7 @@ ob_start();
           <form method="post" action="/admin/jobs/failed/delete" style="display:inline" onsubmit="return confirm('Silinsin mi?')">
             <?= csrf_field() ?>
             <input type="hidden" name="id" value="<?= e($j['id']) ?>">
-            <button class="btn outline" type="submit">Delete</button>
+            <button class="btn danger" type="submit">Delete</button>
           </form>
         </td>
       </tr>

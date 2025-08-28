@@ -18,11 +18,20 @@ final class JobsController
         return new Response(ob_get_clean(), 200, ['Content-Type'=>'text/html; charset=UTF-8']);
     }
 
+    public function detail(Request $req): Response
+    {
+        $id = (string)($req->query['id'] ?? '');
+        $job = $id ? Queue::failedJob($id) : null;
+
+        ob_start();
+        $data = ['id'=>$id, 'job'=>$job];
+        include base_path('modules/Admin/views/job_detail.php');
+        return new Response(ob_get_clean(), 200, ['Content-Type'=>'text/html; charset=UTF-8']);
+    }
+
     public function retry(Request $req): Response
     {
-        // Intelephense P1013 kaçınmak için method() çağırma:
         $httpMethod = strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
-
         if ($httpMethod !== 'POST' || !\Core\Csrf::check($req->input['_token'] ?? '')) {
             return Response::redirect('/admin/jobs/failed');
         }
@@ -34,19 +43,13 @@ final class JobsController
         }
 
         $ok = Queue::retryFailed($id);
-        if ($ok) {
-            \Core\Session::flash('success', "Job {$id} kuyruğa taşındı.");
-        } else {
-            \Core\Session::flash('error', "Job {$id} taşınamadı.");
-        }
+        \Core\Session::flash($ok ? 'success' : 'error', $ok ? "Job {$id} kuyruğa taşındı." : "Job {$id} taşınamadı.");
         return Response::redirect('/admin/jobs/failed');
     }
 
     public function delete(Request $req): Response
     {
-        // Intelephense P1013 kaçınmak için method() çağırma:
         $httpMethod = strtoupper($req->server['REQUEST_METHOD'] ?? 'GET');
-
         if ($httpMethod !== 'POST' || !\Core\Csrf::check($req->input['_token'] ?? '')) {
             return Response::redirect('/admin/jobs/failed');
         }
@@ -58,11 +61,7 @@ final class JobsController
         }
 
         $ok = Queue::deleteFailed($id);
-        if ($ok) {
-            \Core\Session::flash('success', "Job {$id} silindi.");
-        } else {
-            \Core\Session::flash('error', "Job {$id} silinemedi.");
-        }
+        \Core\Session::flash($ok ? 'success' : 'error', $ok ? "Job {$id} silindi." : "Job {$id} silinemedi.");
         return Response::redirect('/admin/jobs/failed');
     }
 }

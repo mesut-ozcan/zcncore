@@ -121,9 +121,11 @@ switch ($cmd) {
         if (class_exists(\Core\Queue\Queue::class)) {
             line("");
             line("Queue:");
-            line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
-            line("  queue:push-demo <e>  Örnek WelcomeMailJob push et");
-            line("  make:job <Name>      Job iskeleti oluştur (App\\Jobs)");
+            line("  queue:work                       Kuyruk işçisini çalıştır (file driver)");
+            line("  queue:push-demo <email>          Örnek WelcomeMailJob push et");
+            line("  queue:push <Class> <json>        Generic push (örn: App\\\\Jobs\\\\X '{\"a\":1}')");
+            line("              [--delay=sec|--at=unixTs]");
+            line("  make:job <Name>                  Job iskeleti oluştur (App\\Jobs)");
         }
         exit(0);
 
@@ -466,6 +468,33 @@ PHP;
         $email = $argv[2] ?? null;
         if (!$email) { line("Kullanım: php cli/zcn queue:push-demo <email>"); exit(1); }
         $id = \Core\Queue\Queue::push(\App\Jobs\WelcomeMailJob::class, ['to'=>$email, 'name'=>'Mesut']);
+        line("Pushed job id={$id}");
+        exit(0);
+
+    case 'queue:push':
+        if (!class_exists(\Core\Queue\Queue::class)) {
+            line("Queue modülü yok.");
+            exit(1);
+        }
+        $class = $argv[2] ?? null;
+        $json  = $argv[3] ?? '{}';
+        if (!$class) { line("Kullanım: php cli/zcn queue:push <Class> <json> [--delay=sec|--at=timestamp]"); exit(1); }
+        $data = json_decode($json, true);
+        if (!is_array($data)) { line("Geçersiz JSON payload"); exit(1); }
+
+        $delay = null; $at = null;
+        foreach ($argv as $a) {
+            if (str_starts_with($a, '--delay=')) $delay = (int)substr($a, 8);
+            if (str_starts_with($a, '--at='))    $at    = (int)substr($a, 5);
+        }
+
+        if ($at) {
+            $id = \Core\Queue\Queue::scheduleAt($class, $data, $at);
+        } elseif ($delay) {
+            $id = \Core\Queue\Queue::pushDelayed($class, $data, $delay);
+        } else {
+            $id = \Core\Queue\Queue::push($class, $data);
+        }
         line("Pushed job id={$id}");
         exit(0);
 

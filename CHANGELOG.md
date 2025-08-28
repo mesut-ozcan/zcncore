@@ -1,3 +1,8 @@
+## 3.3.2
+- Queue: `pushDelayed()` ve `scheduleAt()` ile zamanlama; worker artık availableAt<=now olan işleri tüketir
+- Admin: Failed Job detay sayfası (ham JSON dahil)
+- CLI: `queue:push <Class> <json> [--delay=sec|--at=timestamp]`
+
 ## 3.3.1
 - Admin: Failed Jobs ekranı (liste/Retry/Delete)
 - Queue: failedJobs(), retryFailed(), deleteFailed() yardımcıları
