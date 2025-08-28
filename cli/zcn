@@ -46,6 +46,10 @@ if (is_file($mgr)) require_once $mgr;
 $qif = base_path('core/Queue/Queue.php');
 if (is_file($qif)) require_once $qif;
 
+// Notifier (varsa)
+$ntf = base_path('core/Notification/Notifier.php');
+if (is_file($ntf)) require_once $ntf;
+
 // 5) .env ve config
 try {
     \Core\Env::load(base_path('.env'));
@@ -118,6 +122,7 @@ switch ($cmd) {
             line("");
             line("Queue:");
             line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
+            line("  queue:push-demo <e>  Örnek WelcomeMailJob push et");
         }
         exit(0);
 
@@ -197,7 +202,6 @@ switch ($cmd) {
             if (is_file($example)) {
                 // .env.example'ı kopyala, APP_KEY'i üret ve değiştir
                 $content = (string)file_get_contents($example);
-                // APP_KEY satırı varsa değiştir, yoksa en alta ekle
                 if (preg_match('/^APP_KEY=.*$/m', $content)) {
                     $content = preg_replace('/^APP_KEY=.*$/m', 'APP_KEY='.app_key(), $content);
                 } else {
@@ -231,6 +235,8 @@ SESSION_LIFETIME=120
 SESSION_COOKIE=zcn_session
 SESSION_SAMESITE=Lax
 SESSION_SECURE=false
+
+QUEUE_DRIVER=file
 ENV;
                 $tmpl = str_replace('%APP_KEY%', app_key(), $tmpl);
                 write_file($envPath, $tmpl, false);
@@ -272,7 +278,7 @@ ENV;
 }
 JSON;
 
-        // routes.php  (💡 $router kullanımı — Kernel loadModules bunu sağlıyor)
+        // routes.php
         $routesPhp = <<<PHP
 <?php
 /** @var \\Core\\Router \$router */
@@ -421,6 +427,17 @@ PHP;
             exit(1);
         }
         \Core\Queue\Queue::work();
+        exit(0);
+
+    case 'queue:push-demo':
+        if (!class_exists(\Core\Queue\Queue::class)) {
+            line("Queue modülü yok.");
+            exit(1);
+        }
+        $email = $argv[2] ?? null;
+        if (!$email) { line("Kullanım: php cli/zcn queue:push-demo <email>"); exit(1); }
+        $id = \Core\Queue\Queue::push(\App\Jobs\WelcomeMailJob::class, ['to'=>$email, 'name'=>'Mesut']);
+        line("Pushed job id={$id}");
         exit(0);
 
     default:
