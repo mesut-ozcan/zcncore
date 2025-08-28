@@ -128,7 +128,7 @@ switch ($cmd) {
     case 'serve':
         $host = '127.0.0.1';
         $port = 8000;
-        line("Dev server: http://{$host}:{ $port }");
+        line("Dev server: http://{$host}:{$port}");
         $docroot = base_path('public');
         $cmdline = sprintf('php -S %s:%d -t "%s"', $host, $port, $docroot);
         passthru($cmdline);
@@ -190,19 +190,33 @@ switch ($cmd) {
         @mkdir(base_path('storage/cache'), 0777, true);
         @mkdir(base_path('storage/sessions'), 0777, true);
 
-        // .env yoksa oluştur
         $envPath = base_path('.env');
+        $example = base_path('.env.example');
+
         if (!is_file($envPath)) {
-            $tmpl = <<<ENV
+            if (is_file($example)) {
+                // .env.example'ı kopyala, APP_KEY'i üret ve değiştir
+                $content = (string)file_get_contents($example);
+                // APP_KEY satırı varsa değiştir, yoksa en alta ekle
+                if (preg_match('/^APP_KEY=.*$/m', $content)) {
+                    $content = preg_replace('/^APP_KEY=.*$/m', 'APP_KEY='.app_key(), $content);
+                } else {
+                    $content .= PHP_EOL.'APP_KEY='.app_key().PHP_EOL;
+                }
+                write_file($envPath, $content, false);
+                line(".env .env.example'dan oluşturuldu");
+            } else {
+                // Fallback template
+                $tmpl = <<<ENV
 APP_ENV=local
 APP_DEBUG=true
-APP_URL=http://zcncore.local
+APP_URL=http://localhost
 APP_KEY=%APP_KEY%
 
 DB_HOST=127.0.0.1
-DB_NAME=zcncore
-DB_USER=root
-DB_PASS=
+DB_NAME=example_db
+DB_USER=example_user
+DB_PASS=secret
 DB_CHARSET=utf8mb4
 
 CACHE_DRIVER=file
@@ -218,9 +232,10 @@ SESSION_COOKIE=zcn_session
 SESSION_SAMESITE=Lax
 SESSION_SECURE=false
 ENV;
-            $tmpl = str_replace('%APP_KEY%', app_key(), $tmpl);
-            write_file($envPath, $tmpl, false);
-            line(".env oluşturuldu");
+                $tmpl = str_replace('%APP_KEY%', app_key(), $tmpl);
+                write_file($envPath, $tmpl, false);
+                line(".env oluşturuldu (template)");
+            }
         } else {
             line(".env mevcut, değiştirilmedi");
         }
@@ -256,14 +271,12 @@ ENV;
   "enabled": true
 }
 JSON;
-        // routes.php
+
+        // routes.php  (💡 $router kullanımı — Kernel loadModules bunu sağlıyor)
         $routesPhp = <<<PHP
 <?php
-use Core\Router;
-use Core\Response;
-
-/** @var Router \$this */
-\$this->get('/{$slug}', [\\Modules\\{$Pascal}\\Http\\Controllers\\{$Pascal}HomeController::class, 'index']);
+/** @var \\Core\\Router \$router */
+\$router->get('/{$slug}', [\\Modules\\{$Pascal}\\Http\\Controllers\\{$Pascal}HomeController::class, 'index']);
 PHP;
 
         // Controller

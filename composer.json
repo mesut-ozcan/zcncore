@@ -1,19 +1,21 @@
 {
-  "name": "zcn/zcncore",
-  "description": "ZCNCore - Minimal, module/theme capable core for many PHP projects (Saf PHP).",
+  "name": "mesut-ozcan/zcncore",
+  "description": "Saf PHP mini framework (module + theme).",
   "type": "project",
-  "license": "MIT",
-  "require": {},
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
   "autoload": {
     "psr-4": {
-      "Core\\\\": "core/",
-      "App\\\\": "app/",
-      "Modules\\\\": "modules/"
+      "Core\\": "core/",
+      "App\\": "app/",
+      "Modules\\": "modules/"
     },
-    "files": ["core/Helpers.php"]
+    "files": [
+      "core/Helpers.php"
+    ]
   },
   "scripts": {
-    "post-install-cmd": [],
-    "post-update-cmd": []
+    "test": "phpunit"
   }
 }

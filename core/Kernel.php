@@ -199,6 +199,8 @@ class Kernel
 
                 $routes = $modulePath . '/routes.php';
                 if (is_file($routes)) {
+                    // 🔸 Router'ı include scope’una veriyoruz
+                    $router = $this->router;
                     require $routes;
                 }
             }
