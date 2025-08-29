@@ -1,7 +1,10 @@
+## 3.5.0
+- Database: Seeder runner (`db:seed`, `db:seed:all`)
+- CLI: `make:seeder` komutu
+- Örnek seedler: `UsersSeeder`, `PagesSeeder`, `DatabaseSeeder`
+
 ## 3.4.0
 - Database: Basit QueryBuilder (select/where/order/limit/offset + insert/update/delete)
-- Seeder: Seeder & SeedRunner + `db:seed`, `db:seed:all`, `make:seeder` CLI komutları
-- Örnek: UsersSeeder, PagesSeeder, DatabaseSeeder zinciri
 
 ## 3.3.2
 - Queue: `pushDelayed()` ve `scheduleAt()` ile zamanlama; worker artık availableAt<=now olan işleri tüketir

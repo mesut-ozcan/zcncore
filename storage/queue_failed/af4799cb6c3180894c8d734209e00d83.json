@@ -1,0 +1,13 @@
+{
+    "id": "af4799cb6c3180894c8d734209e00d83",
+    "class": "App\\Jobs\\WelcomeMailJob",
+    "payload": {
+        "to": "test@example.com",
+        "name": "Mesut"
+    },
+    "attempt": 3,
+    "enqueued": 1756425539,
+    "reserved": 1756425541,
+    "failed_at": 1756425541,
+    "fail_reason": "attempt_reached"
+}

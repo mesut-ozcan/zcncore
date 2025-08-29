@@ -18,6 +18,22 @@ function base_path(string $p = ''): string {
     return rtrim(ZCN_BASE, "/\\") . ($p ? DIRECTORY_SEPARATOR . ltrim($p, "/\\") : '');
 }
 
+// 3.5) Mini autoloader (App\Core\Modules namespace’leri için)
+spl_autoload_register(function(string $class): void {
+    $cls = ltrim($class, '\\');
+    $path = null;
+    if (str_starts_with($cls, 'Core\\')) {
+        $path = base_path('core/'.str_replace('\\','/', substr($cls, 5)).'.php');
+    } elseif (str_starts_with($cls, 'App\\')) {
+        $path = base_path('app/'.str_replace('\\','/', substr($cls, 4)).'.php');
+    } elseif (str_starts_with($cls, 'Modules\\')) {
+        $path = base_path('modules/'.str_replace('\\','/', substr($cls, 8)).'.php');
+    }
+    if ($path && is_file($path)) {
+        require_once $path;
+    }
+});
+
 // 4) Çekirdek sınıfları yükle (env() çağrılmadan önce Helpers/env hazır olmalı!)
 require_once base_path('core/Env.php');
 if (!function_exists('env')) {
@@ -42,9 +58,21 @@ if (is_file($dbc)) require_once $dbc;
 $mgr = base_path('core/Database/Migrator.php');
 if (is_file($mgr)) require_once $mgr;
 
+// Seeder (yeni)
+$seederBase = base_path('core/Database/Seeder.php');
+if (is_file($seederBase)) require_once $seederBase;
+$seedRunner = base_path('core/Database/SeedRunner.php');
+if (is_file($seedRunner)) require_once $seedRunner;
+
 // Queue (varsa)
 $qif = base_path('core/Queue/Queue.php');
-if (is_file($qif)) require_once $qif;
+if (is_file($qif)) {
+    require_once $qif;
+    $qdrv = base_path('core/Queue/Drivers/FileQueue.php');
+    if (is_file($qdrv)) {
+        require_once $qdrv;
+    }
+}
 
 // Notifier (varsa)
 $ntf = base_path('core/Notification/Notifier.php');
@@ -112,20 +140,21 @@ switch ($cmd) {
         line("  migrate:status       Migration durumunu göster");
         line("  migrate:rollback     Son batch'i geri al");
         line("  make:migration <N>   Boş migration dosyası oluştur");
+        line("  make:seeder <Name>   Seeder iskeleti oluştur (app/Database/Seeders)");
+        line("  db:seed [--class=X]  Belirli seeder'ı çalıştır (varsayılan: DatabaseSeeder)");
+        line("  db:seed:all          Tüm seeder zincirini çalıştır (DatabaseSeeder varsa onu)");
         line("");
         line("Installer & Scaffold:");
         line("  install              İlk kurulum (.env, APP_KEY, storage, migrate)");
         line("  make:module <Name>   Modül iskeleti oluştur (routes, controller, view)");
         line("  make:theme <name>    Tema iskeleti oluştur (views + public/assets)");
-        line("  make:controller <Name> [--module=Blog]");
+        line("  make:controller <N>  Controller iskeleti (App/ veya Modules/*)");
         if (class_exists(\Core\Queue\Queue::class)) {
             line("");
             line("Queue:");
-            line("  queue:work                       Kuyruk işçisini çalıştır (file driver)");
-            line("  queue:push-demo <email>          Örnek WelcomeMailJob push et");
-            line("  queue:push <Class> <json>        Generic push (örn: App\\\\Jobs\\\\X '{\"a\":1}')");
-            line("              [--delay=sec|--at=unixTs]");
-            line("  make:job <Name>                  Job iskeleti oluştur (App\\Jobs)");
+            line("  queue:work           Kuyruk işçisini çalıştır (file driver)");
+            line("  queue:push-demo <e>  Örnek WelcomeMailJob push et");
+            line("  make:job <Name>      Job iskeleti oluştur (App\\Jobs)");
         }
         exit(0);
 
@@ -443,13 +472,80 @@ final class {$Pascal}
     public function handle(array \$data): bool
     {
         // TODO: işi buraya yaz
-        // ör: sleep(1);
         return true;
     }
 }
 PHP;
         write_file($path, $tpl);
         line("Job oluşturuldu: app/Jobs/{$Pascal}.php");
+        exit(0);
+
+    // ---------------------------
+    // Seeder komutları (yeni)
+    // ---------------------------
+    case 'make:seeder':
+        $name = $argv[2] ?? null;
+        if (!$name) { line("Kullanım: php cli/zcn make:seeder <Name>"); exit(1); }
+        if (!preg_match('/Seeder$/', $name)) $name .= 'Seeder';
+        $Pascal = preg_replace('/[^A-Za-z0-9]/', '', $name);
+        $path = base_path('app/Database/Seeders/'.$Pascal.'.php');
+        $tpl = <<<PHP
+<?php
+namespace App\\Database\\Seeders;
+
+use Core\\Database\\Seeder;
+use Core\\Database\\Connection;
+
+class {$Pascal} extends Seeder
+{
+    public function run(): void
+    {
+        // \$pdo = Connection::getInstance()->pdo();
+        // örnek:
+        // \$pdo->prepare("INSERT INTO users (name,email,password,created_at) VALUES (?,?,?,NOW())")
+        //     ->execute(['Demo','demo@example.com', password_hash('secret', PASSWORD_BCRYPT)]);
+    }
+}
+PHP;
+        write_file($path, $tpl);
+        line("Seeder oluşturuldu: app/Database/Seeders/{$Pascal}.php");
+        exit(0);
+
+    case 'db:seed':
+        if (!class_exists(\Core\Database\SeedRunner::class)) {
+            line("SeedRunner yok: core/Database/SeedRunner.php bulunamadı.");
+            exit(1);
+        }
+        // --class=XYZ
+        $class = null;
+        foreach ($argv as $a) {
+            if (str_starts_with($a, '--class=')) {
+                $class = substr($a, 8);
+                break;
+            }
+        }
+        if (!$class) $class = 'DatabaseSeeder';
+        try {
+            \Core\Database\SeedRunner::runClass($class);
+            line("Seed OK: {$class}");
+        } catch (\Throwable $e) {
+            line("Seed error: ".$e->getMessage());
+            exit(1);
+        }
+        exit(0);
+
+    case 'db:seed:all':
+        if (!class_exists(\Core\Database\SeedRunner::class)) {
+            line("SeedRunner yok: core/Database/SeedRunner.php bulunamadı.");
+            exit(1);
+        }
+        try {
+            \Core\Database\SeedRunner::runAll();
+            line("Seed all OK");
+        } catch (\Throwable $e) {
+            line("Seed all error: ".$e->getMessage());
+            exit(1);
+        }
         exit(0);
 
     case 'queue:work':
@@ -468,33 +564,6 @@ PHP;
         $email = $argv[2] ?? null;
         if (!$email) { line("Kullanım: php cli/zcn queue:push-demo <email>"); exit(1); }
         $id = \Core\Queue\Queue::push(\App\Jobs\WelcomeMailJob::class, ['to'=>$email, 'name'=>'Mesut']);
-        line("Pushed job id={$id}");
-        exit(0);
-
-    case 'queue:push':
-        if (!class_exists(\Core\Queue\Queue::class)) {
-            line("Queue modülü yok.");
-            exit(1);
-        }
-        $class = $argv[2] ?? null;
-        $json  = $argv[3] ?? '{}';
-        if (!$class) { line("Kullanım: php cli/zcn queue:push <Class> <json> [--delay=sec|--at=timestamp]"); exit(1); }
-        $data = json_decode($json, true);
-        if (!is_array($data)) { line("Geçersiz JSON payload"); exit(1); }
-
-        $delay = null; $at = null;
-        foreach ($argv as $a) {
-            if (str_starts_with($a, '--delay=')) $delay = (int)substr($a, 8);
-            if (str_starts_with($a, '--at='))    $at    = (int)substr($a, 5);
-        }
-
-        if ($at) {
-            $id = \Core\Queue\Queue::scheduleAt($class, $data, $at);
-        } elseif ($delay) {
-            $id = \Core\Queue\Queue::pushDelayed($class, $data, $delay);
-        } else {
-            $id = \Core\Queue\Queue::push($class, $data);
-        }
         line("Pushed job id={$id}");
         exit(0);
 

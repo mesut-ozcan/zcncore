@@ -1,0 +1,15 @@
+{
+    "id": "68b0d150-5cfe594ed120",
+    "class": "App\\Jobs\\WelcomeMailJob",
+    "data": {
+        "to": "test@example.com",
+        "name": "Mesut"
+    },
+    "attempts": 1,
+    "max": 3,
+    "createdAt": 1756418384,
+    "reserved": 1756425541,
+    "attempt": 3,
+    "failed_at": 1756425541,
+    "fail_reason": "attempt_reached"
+}

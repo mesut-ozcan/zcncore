@@ -6,7 +6,7 @@ final class Application
     private static ?Application $instance = null;
     private string $basePath;
     private array $container = [];
-    private string $version = '3.3.2';
+    private string $version = '3.5.0';
     private float $startedAt;
 
     private function __construct(string $basePath)

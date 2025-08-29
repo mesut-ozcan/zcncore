@@ -30,7 +30,9 @@
   <header class="container">
     <a href="/" class="brand">ZCNCore</a>
     <nav>
-      <a href="/">Home</a> · <a href="/pages/hello-zcn">Demo Page</a>
+      <a href="/">Home</a>
+      · <a href="/blog">Blog</a>
+      · <a href="/pages/hello-zcn">Demo Page</a>
       <?php if (!empty($_SESSION['user'])): ?>
         · <a href="/account">Hesabım</a>
         <?php if (strtolower($_SESSION['user']['role'] ?? '') === 'admin'): ?>

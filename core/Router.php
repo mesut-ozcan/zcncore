@@ -2,19 +2,23 @@
 namespace Core;
 
 use Core\Validation\FormRequest;
-use ReflectionClass;
 use ReflectionFunction;
 use ReflectionMethod;
 use ReflectionNamedType;
-use ReflectionParameter;
 
 class Router
 {
     private array $routes = ['GET'=>[], 'POST'=>[], 'PUT'=>[], 'DELETE'=>[]];
+    /** @var array<int, callable> */
     private array $globalMiddleware = [];
+    /** @var array<string, callable|string> */
     private array $mwAliases = []; // name => callable|string (class-string)
 
-    /** @var array<string, array{method:string,pattern:string,handler:mixed,middleware:array,regex:string,paramNames:array}> */
+    /**
+     * @var array<string, array{
+     *   method:string,pattern:string,handler:mixed,middleware:array,regex:string,paramNames:array
+     * }>
+     */
     private array $named = [];
 
     // Group stacks
@@ -23,20 +27,39 @@ class Router
     private array $namePrefixStack = [''];
 
     /**
-     * @param callable|string $mw callable veya class-string
+     * Bir middleware alias'ı tanımlar.
+     * @param callable|string $mw callable veya class-string ( __invoke )
      */
     public function alias(string $name, $mw): void
     {
         $this->mwAliases[$name] = $mw;
     }
 
-    public function middleware(callable $mw): void
+    /**
+     * Global middleware ekler. callable ya da class-string kabul eder.
+     * @param callable|string $mw
+     */
+    public function middleware($mw): void
     {
-        $this->globalMiddleware[] = $mw;
+        // alias adı gelebilir
+        if (is_string($mw) && isset($this->mwAliases[$mw])) {
+            $mw = $this->mwAliases[$mw];
+        }
+        // class-string ise örnekle
+        if (is_string($mw) && class_exists($mw)) {
+            $mw = new $mw();
+        }
+        if (is_callable($mw)) {
+            $this->globalMiddleware[] = $mw;
+        }
     }
 
     /**
      * Grup: prefix + middleware + name prefix
+     * @param string $prefix
+     * @param array<int, callable|string> $middleware
+     * @param callable(\Core\Router):void $callback
+     * @param string $namePrefix
      */
     public function group(string $prefix, array $middleware, callable $callback, string $namePrefix = ''): void
     {
@@ -57,6 +80,14 @@ class Router
         array_pop($this->namePrefixStack);
     }
 
+    /**
+     * Altyapı: bir rota kaydı ekler.
+     * @param string $method
+     * @param string $pattern
+     * @param mixed  $handler
+     * @param array<int, callable|string> $middleware
+     * @param string|null $name
+     */
     public function add(string $method, string $pattern, $handler, array $middleware = [], ?string $name = null): void
     {
         // group prefix
@@ -68,10 +99,13 @@ class Router
         $mw = array_merge(end($this->mwStack), $this->resolveMiddlewareList($middleware));
 
         [$regex, $paramNames] = $this->toRegex($pattern);
-        $item = compact('pattern','regex','handler') + [
-            'middleware'=>$mw,
-            'method'=>strtoupper($method),
-            'paramNames'=>$paramNames
+        $item = [
+            'pattern'    => $pattern,
+            'regex'      => $regex,
+            'handler'    => $handler,
+            'middleware' => $mw,
+            'method'     => strtoupper($method),
+            'paramNames' => $paramNames,
         ];
         $this->routes[strtoupper($method)][] = $item;
 
@@ -81,17 +115,72 @@ class Router
         }
     }
 
-    // BC
-    public function get($p,$h,$m=[]){ $this->add('GET',$p,$h,$m,null); }
-    public function post($p,$h,$m=[]){ $this->add('POST',$p,$h,$m,null); }
-    public function put($p,$h,$m=[]){ $this->add('PUT',$p,$h,$m,null); }
-    public function delete($p,$h,$m=[]){ $this->add('DELETE',$p,$h,$m,null); }
+    // ----------------------------
+    // Yardımcılar (GET/POST/PUT/DELETE)
+    // Not: Geriye dönük uyumluluk için 3. parametre hem name(string) hem middleware(array) olabilir.
+    // 4. parametre de buna göre name veya middleware olarak esnek yorumlanır.
 
-    // Named
+    /**
+     * @param string $p
+     * @param mixed  $h
+     * @param string|array|null $nameOrMw
+     * @param string|array $maybeNameOrMw
+     */
+    public function get(string $p, $h, $nameOrMw = null, $maybeNameOrMw = []): void
+    {
+        [$name, $mw] = $this->normalizeNameAndMiddleware($nameOrMw, $maybeNameOrMw);
+        $this->add('GET', $p, $h, $mw, $name);
+    }
+
+    public function post(string $p, $h, $nameOrMw = null, $maybeNameOrMw = []): void
+    {
+        [$name, $mw] = $this->normalizeNameAndMiddleware($nameOrMw, $maybeNameOrMw);
+        $this->add('POST', $p, $h, $mw, $name);
+    }
+
+    public function put(string $p, $h, $nameOrMw = null, $maybeNameOrMw = []): void
+    {
+        [$name, $mw] = $this->normalizeNameAndMiddleware($nameOrMw, $maybeNameOrMw);
+        $this->add('PUT', $p, $h, $mw, $name);
+    }
+
+    public function delete(string $p, $h, $nameOrMw = null, $maybeNameOrMw = []): void
+    {
+        [$name, $mw] = $this->normalizeNameAndMiddleware($nameOrMw, $maybeNameOrMw);
+        $this->add('DELETE', $p, $h, $mw, $name);
+    }
+
+    // Named helpers
     public function getNamed(string $name, string $p, $h, array $m = []): void { $this->add('GET', $p, $h, $m, $name); }
     public function postNamed(string $name, string $p, $h, array $m = []): void { $this->add('POST', $p, $h, $m, $name); }
     public function putNamed(string $name, string $p, $h, array $m = []): void { $this->add('PUT', $p, $h, $m, $name); }
     public function deleteNamed(string $name, string $p, $h, array $m = []): void { $this->add('DELETE', $p, $h, $m, $name); }
+
+    /**
+     * @param string|array|null $a
+     * @param string|array $b
+     * @return array{0:?string,1:array}
+     */
+    private function normalizeNameAndMiddleware($a, $b): array
+    {
+        $name = null; $mw = [];
+        if (is_string($a)) {
+            // get('/p',h,'route.name', [...])
+            $name = $a;
+            $mw = is_array($b) ? $b : [];
+        } elseif (is_array($a)) {
+            // get('/p',h,[mw,...], 'route.name')
+            $mw = $a;
+            if (is_string($b)) $name = $b;
+        } elseif ($a === null) {
+            // get('/p',h)  veya get('/p',h,null,[mw])  veya get('/p',h,null,'route.name')
+            if (is_array($b)) { $mw = $b; }
+            elseif (is_string($b)) { $name = $b; }
+        }
+        return [$name, $mw];
+    }
+
+    // ----------------------------
 
     private function toRegex(string $pattern): array
     {
@@ -224,7 +313,7 @@ class Router
     }
 
     /**
-     * @param ReflectionMethod|ReflectionFunction $ref
+     * @param \ReflectionMethod|\ReflectionFunction $ref
      * @param array<int, mixed> $routeArgs
      * @return array<int, mixed>
      */
@@ -278,7 +367,6 @@ class Router
             } elseif ($p->isDefaultValueAvailable()) {
                 $out[] = $p->getDefaultValue();
             } else {
-                // Eksik param — boş string
                 $out[] = null;
             }
         }
