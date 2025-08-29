@@ -1,32 +1,29 @@
-# Composer vendor klasörü
-/vendor/
-
-# Ortam dosyası (gizli bilgiler)
-.env
-
-# WAMP / Windows gereksiz dosyalar
+# OS
+.DS_Store
 Thumbs.db
-desktop.ini
 
-# VSCode ayarları
+# Editor / IDE
 .vscode/
-*.code-workspace
-
-# PhpStorm / JetBrains
 .idea/
 
-# Storage içeriği (cache, logs, uploads) - sadece boş .gitkeep bırak
-/storage/cache/*
-/storage/logs/*
-/storage/uploads/*
+# PHP / Composer
+/vendor/
+composer.lock
+/.phpunit.result.cache
 
-# Node.js kullanırsan (ileride)
+# Cache / Logs / Sessions / Uploads
+/storage/cache/
+storage/cache/
+storage/logs/
+storage/sessions/
+storage/uploads/
+
+# Build
+/public/themes/*/assets/*.map
+
+# Env
+.env
+.env.local
+
+# Node (varsayılsa)
 node_modules/
-
-# Sistem dosyaları
-.DS_Store
-".phpunit.result.cache" 
-.phpunit.result.cache
-".chatgpt" 
-"get(...)" 
-"git" 
