@@ -1,3 +1,9 @@
+## 3.5.1
+- Fix: Admin named routes (name prefix + cache clear adı)
+- Fix: Blog controller slug tabanlı routing, fallback HTML ve try/catch
+- UI: Navbar'da Blog linki
+- Repo: Temiz .gitignore, README UTF-8
+
 ## 3.5.0
 - Database: Seeder runner (`db:seed`, `db:seed:all`)
 - CLI: `make:seeder` komutu
