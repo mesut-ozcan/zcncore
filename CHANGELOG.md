@@ -1,3 +1,8 @@
+## 3.5.2
+- Blog: CRUD rotaları tamamlandı (create/show/edit/delete)
+- Blog: View’lar eklendi (modules/Blog/views/posts)
+- Küçük dokümantasyon/README düzenleri
+
 ## 3.5.1
 - Fix: Admin named routes (name prefix + cache clear adı)
 - Fix: Blog controller slug tabanlı routing, fallback HTML ve try/catch
